@@ -1,0 +1,3 @@
+[submodule "submodules/MachineLearningPapers"]
+	path = submodules/MachineLearningPapers
+	url = https://github.com/Samuel-Nathanson/MachineLearningPapers.git
