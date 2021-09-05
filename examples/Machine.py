@@ -29,7 +29,7 @@ standardize(data, data, "MMAX", inplace=True)
 
 partition(data, 5, classificationColumnId=None, includeValidationSet=True)
 
-print("MSE Error: " + str(evaluateError([1,2,3,4,5], [2,3,4,5,6], method="MSE")))
+print("MSE Error: " + str(evaluateError([x for x in range(0,10000)], [x for x in range(0,10000)], method="MSE")))
 evaluateError([1,2,3,4,5], [2,3,4,5,6], method="MAE")
 evaluateError([0,0,0,1,0], [1,1,0,1,0], method="precision")
 evaluateError([0,0,0,1,0], [1,1,0,1,0], method="recall")

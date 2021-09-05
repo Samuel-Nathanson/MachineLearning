@@ -25,7 +25,7 @@ def convertToOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
 
     # Encode ordinal values as integers
     for ordinal, integer in ordinalValueDict.items():
-        dataCopy[columnId].replace(ordinal, integer, inplace=True)
+        data[columnId].replace(ordinal, integer, inplace=True)
 
     if(not inplace):
         return data
@@ -172,24 +172,65 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
 # actualValues: list or nparray of values
 # expectedValues: list or nparray of values (must be same length as actualValues)
 def evaluateError(actualValues, expectedValues, method='MSE'):
-    def countTruePositive(v1, v2):
-        return 0
-    def countFalsePositive(v1, v2):
-        return 0
-    def countTrueNegative(v1, v2):
-        return 0
-    def countFalseNegative(v1, v2):
-        return 0
-    def precision(v1, v2):
+    def countTruePositive(actualValues, expectedValues):
+        tp = 0
+        for index in range(0,len(actualValues)):
+            if(actualValues[index] == 1 and expectedValues[index] == 1):
+                tp += 1
+        return tp
+
+    def countFalsePositive(actualValues, expectedValues):
+        fp = 0
+        for index in range(0, len(actualValues)):
+            if (actualValues[index] == 1 and expectedValues[index] == 0):
+                fp += 1
+        return fp
+
+    def countTrueNegative(actualValues, expectedValues):
+        tn = 0
+        for index in range(0, len(actualValues)):
+            if (actualValues[index] == 0 and expectedValues[index] == 0):
+                tn += 1
+        return tn
+
+    def countFalseNegative(actualValues, expectedValues):
+        fn = 0
+        for index in range(0, len(actualValues)):
+            if (actualValues[index] == 0 and expectedValues[index] == 1):
+                fn += 1
+        return fn
+
+    def precision(actualValues, expectedValues):
         # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
-        return 0
-    def recall(f1, f2):
+        tp = countTruePositive(actualValues, expectedValues)
+        fp = countFalsePositive(actualValues, expectedValues)
+        assert((tp + fp) != 0)
+        return (tp/(tp + fp))
+
+    def recall(actualValues, expectedValues):
         # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
-        return 0
-    def MSE(v1, v2):
-        return 0
-    def MAE(v1, v2):
-        return 0
+        tp = countTruePositive(actualValues, expectedValues)
+        fn = countFalseNegative(actualValues, expectedValues)
+        assert(tp+fn != 0)
+        return (tp/(tp+fn))
+
+    def MSE(actualValues, expectedValues):
+        # diff = np.subtract(actualValues, expectedValues)
+        # np.subtract is 50% slower than my method
+        se = 0
+        for index in range(0, len(actualValues)):
+            se += (expectedValues[index] - actualValues[index]) ** 2
+        mse = se / len(actualValues)
+        return mse
+
+    def MAE(actualValues, expectedValues):
+        # diff = np.subtract(actualValues, expectedValues)
+        # np.subtract is 50% slower than my method
+        ae = 0
+        for index in range(0, len(actualValues)):
+            ae += math.abs(expectedValues[index] - actualValues[index])
+        mae = ae / len(actualValues)
+        return mae
 
     methods = { "precision": precision,
                 "recall": recall,
@@ -198,6 +239,7 @@ def evaluateError(actualValues, expectedValues, method='MSE'):
 
     assert(type(actualValues) == list or type(actualValues) == np.ndarray)
     assert(type(expectedValues) == list or type(expectedValues) == np.ndarray)
+    assert(len(actualValues) != 0)
     assert(len(actualValues) == len(expectedValues))
     assert(method in methods.keys())
 
