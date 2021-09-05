@@ -17,7 +17,6 @@ oneIndex = np.max(frequencyDiscretizedData["PRP"])
 print("Frequency Discretized - PRP Bin 0: " + str(np.count_nonzero(frequencyDiscretizedData["PRP"] == zeroIndex)))
 print("Frequency Discretized - PRP Bin 1: " + str(np.count_nonzero(frequencyDiscretizedData["PRP"] == oneIndex)))
 
-
 discretize(data, "PRP", xargs={"dMethod": "equal-width", "bins": 2}, inplace=True)
 zeroIndex = np.min(data["PRP"])
 oneIndex = np.max(data["PRP"])
@@ -29,3 +28,11 @@ print("Equal-Width Discretized - PRP Bin 1: " + str(np.count_nonzero(data["PRP"]
 standardize(data, data, "MMAX", inplace=True)
 
 partition(data, 5, classificationColumnId=None, includeValidationSet=True)
+
+print("MSE Error: " + str(evaluateError([1,2,3,4,5], [2,3,4,5,6], method="MSE")))
+evaluateError([1,2,3,4,5], [2,3,4,5,6], method="MAE")
+evaluateError([0,0,0,1,0], [1,1,0,1,0], method="precision")
+evaluateError([0,0,0,1,0], [1,1,0,1,0], method="recall")
+
+
+

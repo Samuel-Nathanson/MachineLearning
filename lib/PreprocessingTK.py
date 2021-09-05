@@ -158,6 +158,7 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
                 validationSet = fold[validationIndex:]
                 folds.append([trainingSet, testingSet, validationSet])
             else:
+                # Extract Testing Set
                 testingSet = fold[testingIndex:]
                 folds.append([trainingSet, testingSet])
 
@@ -167,4 +168,42 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
         # Caution: If |Sk| < 2 (or 3, with validation set included) then
         #   we won't be able to distribute values from Sk into training, testing, and validation sets
     return folds
+
+# actualValues: list or nparray of values
+# expectedValues: list or nparray of values (must be same length as actualValues)
+def evaluateError(actualValues, expectedValues, method='MSE'):
+    def countTruePositive(v1, v2):
+        return 0
+    def countFalsePositive(v1, v2):
+        return 0
+    def countTrueNegative(v1, v2):
+        return 0
+    def countFalseNegative(v1, v2):
+        return 0
+    def precision(v1, v2):
+        # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
+        return 0
+    def recall(f1, f2):
+        # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
+        return 0
+    def MSE(v1, v2):
+        return 0
+    def MAE(v1, v2):
+        return 0
+
+    methods = { "precision": precision,
+                "recall": recall,
+                "MSE": MSE,
+                "MAE": MAE}
+
+    assert(type(actualValues) == list or type(actualValues) == np.ndarray)
+    assert(type(expectedValues) == list or type(expectedValues) == np.ndarray)
+    assert(len(actualValues) == len(expectedValues))
+    assert(method in methods.keys())
+
+    return methods[method](actualValues, expectedValues)
+
+
+
+
 
