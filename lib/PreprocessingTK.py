@@ -1,7 +1,10 @@
 import pandas
 import math
 import numpy as np
+import sys
+from scipy.stats import mode
 
+validListTypes = (pandas.Series, list, np.ndarray)
 #TODO: Clean up comments
 
 # O(1) key lookup function
@@ -11,6 +14,48 @@ def keyExists(df, key):
     except KeyError:
         return False
     return True
+
+def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"method": "mean"}, inplace=False):
+    data = dataFrame if inplace else dataFrame.copy(deep=True)
+
+    def meanReplacement():
+        sum = 0
+        count = 0
+        for x in range(0,len(data[columnId])):
+            try:
+                if(not data[columnId].iloc[x] in nullIndicators):
+                    sum += float(data[columnId].iloc[x])
+                    count += 1
+            except TypeError:
+                sys.stderr.write(f"TypeError occurred while trying to compute mean of column {columnId}")
+                exit(1)
+
+        assert(not(count == 0))
+        mean = sum / count
+        data[columnId].replace(nullIndicators, mean, inplace=True)
+
+    def constantReplacement():
+        assert(keyExists(imputation, "constant"))
+        for nullIndicator in nullIndicators:
+            data[columnId].replace(nullIndicator, imputation["constant"], inplace=True)
+
+    imputeMethods = {"mean": meanReplacement,
+                     "constant": constantReplacement}
+
+    # Validate arguments
+    assert (type(data) == pandas.core.frame.DataFrame)
+    assert (type(columnId) == str)
+    assert (keyExists(data, columnId))
+    assert (isinstance(nullIndicators, validListTypes))
+    assert (len(nullIndicators) != 0)
+    assert (type(imputation) == dict)
+    assert (keyExists(imputation, "method"))
+    assert (imputation["method"] in imputeMethods.keys())
+
+    imputeMethods[imputation["method"]]()
+
+    if(not inplace):
+        return data
 
 # dataFrame: Pandas Dataframe
 # columnId: Column ID to replace values with
@@ -33,11 +78,11 @@ def convertToOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
 # dataFrame: Pandas Dataframe
 # columnId: Column ID to replace nominal values with one-hot encoded values
 # nominalValueList: List of nominal values which represent all possible categorical values in the column
-def convertToNominal(dataFrame, columnId, nominalValueList, inplace=False):
+def convertNominal(dataFrame, columnId, nominalValueList, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     assert(type(data) == pandas.core.frame.DataFrame)
     assert(type(columnId) == str)
-    assert(type(nominalValueList) == list or type(nominalValueList) == np.ndarray)
+    assert(isinstance(nominalValueList, validListTypes))
     assert(keyExists(data, columnId))
 
     oneHotWidth = len(nominalValueList)
@@ -140,6 +185,7 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
 
     if(classificationColumnId):
         print('Classification Task')
+
         # first, partition training set based on y-label into sets of size [|Y0|,|Y1|...,|YN|]
     else:
         for foldNum in range(0, k):
@@ -228,24 +274,95 @@ def evaluateError(actualValues, expectedValues, method='MSE'):
         # np.subtract is 50% slower than my method
         ae = 0
         for index in range(0, len(actualValues)):
-            ae += math.abs(expectedValues[index] - actualValues[index])
+            ae += math.fabs(expectedValues[index] - actualValues[index])
         mae = ae / len(actualValues)
         return mae
+
+    def R2(actualValues, expectedValues):
+        num = 0
+        den = 0
+        mean = np.mean(expectedValues)
+        for index in range(0, len(actualValues)):
+            num += (expectedValues[index] - actualValues[index]) ** 2
+            den += (expectedValues[index] - mean) ** 2
+        assert(den != 0)
+        return 1 - (num / den)
+
+    def pearsonCorr(actualValues, expectedValues):
+        # Formula from https://study.com/academy/lesson/pearson-correlation-coefficient-formula-example-significance.html
+        n = len(expectedValues)
+        sumX = 0
+        sumY = 0
+        sumXsq = 0
+        sumYsq = 0
+        sumXY = 0
+
+        for index in range(0, len(actualValues)):
+            sumX += actualValues[index]
+            sumY += expectedValues[index]
+            sumXsq += actualValues[index] ** 2
+            sumYsq += expectedValues[index] ** 2
+            sumXY += actualValues[index] * expectedValues[index]
+
+        num = n * sumXY - sumX * sumY
+        den = (n*sumXsq - sumX**2) * (n*sumYsq - sumY**2)
+        if(den <= 0):
+            # Try to correct for floating point error
+            denTerm1 = (n*sumXsq - sumX**2)
+            denTerm2 = (n*sumYsq - sumY**2)
+            if (n*sumXsq - sumX**2) < 10e-5:
+                denTerm1 += 10e-5
+            if (n*sumYsq - sumY**2) < 10e-5:
+                denTerm2 += 10e-5
+            den = denTerm1 * denTerm2
+
+        pearsonCorrCoeff = num / math.sqrt(den)
+        return pearsonCorrCoeff
+
+    def f1(actualValues, expectedValues):
+        p = precision(actualValues, expectedValues)
+        r = recall(actualValues, expectedValues)
+        num = p * r
+        den = p + r
+        assert(den != 0)
+        f1Score = 2 * (num / den)
+        return f1Score
 
     methods = { "precision": precision,
                 "recall": recall,
                 "MSE": MSE,
-                "MAE": MAE}
+                "MAE": MAE,
+                "R2": R2,
+                "pearson": pearsonCorr,
+                "f1": f1}
 
-    assert(type(actualValues) == list or type(actualValues) == np.ndarray)
-    assert(type(expectedValues) == list or type(expectedValues) == np.ndarray)
+    assert(isinstance(actualValues, validListTypes))
+    assert(isinstance(expectedValues, validListTypes))
     assert(len(actualValues) != 0)
     assert(len(actualValues) == len(expectedValues))
     assert(method in methods.keys())
 
-    return methods[method](actualValues, expectedValues)
+    return methods[method](list(actualValues), list(expectedValues))
 
+def naivePredictor(trainingSet, testingSet, predictorColId, method="regression"):
+    assert(type(trainingSet) == pandas.DataFrame)
+    assert(type(testingSet) == pandas.DataFrame)
+    assert (keyExists(trainingSet, predictorColId))
+    assert (keyExists(testingSet, predictorColId))
 
+    def majority(trainingSet):
+        return mode(trainingSet[predictorColId])
+
+    def regress(trainingSet):
+        return np.mean(trainingSet[predictorColId])
+
+    methods = {
+        "classification" : majority,
+        "regression" : regress
+    }
+
+    assert(method in methods)
+    return methods[method](trainingSet)
 
 
 
