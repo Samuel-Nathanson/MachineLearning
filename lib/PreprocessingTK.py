@@ -182,113 +182,147 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
 
     foldSize = math.ceil(dataFrame.shape[0] / k)
     folds = []
+    shuffledFrame = dataFrame.sample(frac=1, random_state=0).reset_index(drop=True)
+
+    def stratify():
+        stratifiedFrames = []
+        uniqueClasses = list(np.unique(dataFrame[classificationColumnId]))
+        for classification in uniqueClasses:
+            classExamples = dataFrame[dataFrame[classificationColumnId] == classification]
+            #   ensure |Yi|/k >= 1
+            # Caution: If |Sk| < 2 (or 3, with validation set included) then
+            #   we won't be able to distribute values from Sk into training, testing, and validation sets
+            assert(math.floor(len(classExamples) / k) >= (3 if includeValidationSet else 2))
+            stratifiedFrames.append(classExamples)
+        return stratifiedFrames
+
+    frames = [] # frames, which will be moved into folds containing test/train/validation sets
+    folds = []
 
     if(classificationColumnId):
         print('Classification Task')
-
         # first, partition training set based on y-label into sets of size [|Y0|,|Y1|...,|YN|]
-    else:
+        stratifiedData = stratify()
+
+        # Next, separate data into k Data Frames
+        listStartIdxs = [0 for i in range(0,len(stratifiedData))]
         for foldNum in range(0, k):
-            fold = dataFrame[foldNum*foldSize:(foldNum+1)*foldSize]
+            frame = pandas.DataFrame()
+            for classNumber in range(0,len(stratifiedData)):
+                classExamples = stratifiedData[classNumber]
+                examplesPerFold = math.floor(len(classExamples) / k)
+                # add first |Yi|/k examples to set Sk
+                if(foldNum == k-1):
+                    frame = pandas.concat([frame, classExamples.iloc[listStartIdxs[classNumber]:]])
+                else:
+                    stopIdx = listStartIdxs[classNumber] + examplesPerFold
+                    frame = pandas.concat([frame, classExamples.iloc[listStartIdxs[classNumber]:stopIdx]])
+                    listStartIdxs[classNumber] += examplesPerFold
+            # Shuffle Frames - Otherwise, training and testing sets may include only examples from one class
+            frames.append(frame)
+    else:
+        # Regression task
+        # Separate data into k frames
+        for foldNum in range(0, k):
+            frame = shuffledFrame[foldNum*foldSize:(foldNum+1)*foldSize]
+            frames.append(frame)
 
-            # Extract the training set
-            testingIndex = math.floor(proportions[0] * len(fold))
-            trainingSet = fold[:testingIndex]
+    for frame in frames:
+        frame = frame.sample(frac=1, random_state=0).reset_index(drop=True)
+        # Frame values must be shuffled for the classification case.
+        # Extract the training set
+        testingIndex = math.floor(proportions[0] * len(frame))
+        trainingSet = frame[:testingIndex]
 
-            if(includeValidationSet):
-                validationIndex = math.floor(proportions[1] * len(fold) + testingIndex)
-                # Extract Testing Set
-                testingSet = fold[testingIndex:validationIndex]
+        if(includeValidationSet):
+            validationIndex = math.floor(proportions[1] * len(frame) + testingIndex)
+            # Extract Testing Set
+            testingSet = frame[testingIndex:validationIndex]
 
-                # Extract Validation Set
-                validationSet = fold[validationIndex:]
-                folds.append([trainingSet, testingSet, validationSet])
-            else:
-                # Extract Testing Set
-                testingSet = fold[testingIndex:]
-                folds.append([trainingSet, testingSet])
+            # Extract Validation Set
+            validationSet = frame[validationIndex:]
+            folds.append([trainingSet, testingSet, validationSet])
+        else:
+            # Extract Testing Set
+            testingSet = frame[testingIndex:]
+            folds.append([trainingSet, testingSet])
 
-        # for each k
-        #   ensure |Yi|/k >= 1
-        #   add first |Yi|/k examples to set Sk
-        # Caution: If |Sk| < 2 (or 3, with validation set included) then
-        #   we won't be able to distribute values from Sk into training, testing, and validation sets
     return folds
 
-# actualValues: list or nparray of values
-# expectedValues: list or nparray of values (must be same length as actualValues)
-def evaluateError(actualValues, expectedValues, method='MSE'):
-    def countTruePositive(actualValues, expectedValues):
+# predictedValues: list or nparray of values
+# expectedValues: list or nparray of values (must be same length as predictedValues)
+def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
+    def countTruePositive(predictedValues, expectedValues):
         tp = 0
-        for index in range(0,len(actualValues)):
-            if(actualValues[index] == 1 and expectedValues[index] == 1):
+        for index in range(0,len(predictedValues)):
+            if(predictedValues[index] == classLabel and expectedValues[index] == classLabel):
                 tp += 1
         return tp
 
-    def countFalsePositive(actualValues, expectedValues):
+    def countFalsePositive(predictedValues, expectedValues):
         fp = 0
-        for index in range(0, len(actualValues)):
-            if (actualValues[index] == 1 and expectedValues[index] == 0):
+        for index in range(0, len(predictedValues)):
+            if (predictedValues[index] == classLabel and expectedValues[index] != classLabel):
                 fp += 1
         return fp
 
-    def countTrueNegative(actualValues, expectedValues):
+    def countTrueNegative(predictedValues, expectedValues):
         tn = 0
-        for index in range(0, len(actualValues)):
-            if (actualValues[index] == 0 and expectedValues[index] == 0):
+        for index in range(0, len(predictedValues)):
+            if (predictedValues[index] != classLabel and expectedValues[index] != classLabel):
                 tn += 1
         return tn
 
-    def countFalseNegative(actualValues, expectedValues):
+    def countFalseNegative(predictedValues, expectedValues):
         fn = 0
-        for index in range(0, len(actualValues)):
-            if (actualValues[index] == 0 and expectedValues[index] == 1):
+        for index in range(0, len(predictedValues)):
+            if (predictedValues[index] != classLabel and expectedValues[index] == classLabel):
                 fn += 1
         return fn
 
-    def precision(actualValues, expectedValues):
+    def precision(predictedValues, expectedValues):
         # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
-        tp = countTruePositive(actualValues, expectedValues)
-        fp = countFalsePositive(actualValues, expectedValues)
+        tp = countTruePositive(predictedValues, expectedValues)
+        fp = countFalsePositive(predictedValues, expectedValues)
         assert((tp + fp) != 0)
         return (tp/(tp + fp))
 
-    def recall(actualValues, expectedValues):
+    def recall(predictedValues, expectedValues):
         # Precision and Recall definitions from: https://developers.google.com/machine-learning/crash-course/classification/precision-and-recall
-        tp = countTruePositive(actualValues, expectedValues)
-        fn = countFalseNegative(actualValues, expectedValues)
+        tp = countTruePositive(predictedValues, expectedValues)
+        fn = countFalseNegative(predictedValues, expectedValues)
         assert(tp+fn != 0)
         return (tp/(tp+fn))
 
-    def MSE(actualValues, expectedValues):
-        # diff = np.subtract(actualValues, expectedValues)
+    def MSE(predictedValues, expectedValues):
+        # diff = np.subtract(predictedValues, expectedValues)
         # np.subtract is 50% slower than my method
         se = 0
-        for index in range(0, len(actualValues)):
-            se += (expectedValues[index] - actualValues[index]) ** 2
-        mse = se / len(actualValues)
+        for index in range(0, len(predictedValues)):
+            se += (expectedValues[index] - predictedValues[index]) ** 2
+        mse = se / len(predictedValues)
         return mse
 
-    def MAE(actualValues, expectedValues):
-        # diff = np.subtract(actualValues, expectedValues)
+    def MAE(predictedValues, expectedValues):
+        # diff = np.subtract(predictedValues, expectedValues)
         # np.subtract is 50% slower than my method
         ae = 0
-        for index in range(0, len(actualValues)):
-            ae += math.fabs(expectedValues[index] - actualValues[index])
-        mae = ae / len(actualValues)
+        for index in range(0, len(predictedValues)):
+            ae += math.fabs(expectedValues[index] - predictedValues[index])
+        mae = ae / len(predictedValues)
         return mae
 
-    def R2(actualValues, expectedValues):
+    def R2(predictedValues, expectedValues):
         num = 0
         den = 0
         mean = np.mean(expectedValues)
-        for index in range(0, len(actualValues)):
-            num += (expectedValues[index] - actualValues[index]) ** 2
+        for index in range(0, len(predictedValues)):
+            num += (expectedValues[index] - predictedValues[index]) ** 2
             den += (expectedValues[index] - mean) ** 2
         assert(den != 0)
         return 1 - (num / den)
 
-    def pearsonCorr(actualValues, expectedValues):
+    def pearsonCorr(predictedValues, expectedValues):
         # Formula from https://study.com/academy/lesson/pearson-correlation-coefficient-formula-example-significance.html
         n = len(expectedValues)
         sumX = 0
@@ -297,12 +331,12 @@ def evaluateError(actualValues, expectedValues, method='MSE'):
         sumYsq = 0
         sumXY = 0
 
-        for index in range(0, len(actualValues)):
-            sumX += actualValues[index]
+        for index in range(0, len(predictedValues)):
+            sumX += predictedValues[index]
             sumY += expectedValues[index]
-            sumXsq += actualValues[index] ** 2
+            sumXsq += predictedValues[index] ** 2
             sumYsq += expectedValues[index] ** 2
-            sumXY += actualValues[index] * expectedValues[index]
+            sumXY += predictedValues[index] * expectedValues[index]
 
         num = n * sumXY - sumX * sumY
         den = (n*sumXsq - sumX**2) * (n*sumYsq - sumY**2)
@@ -319,42 +353,56 @@ def evaluateError(actualValues, expectedValues, method='MSE'):
         pearsonCorrCoeff = num / math.sqrt(den)
         return pearsonCorrCoeff
 
-    def f1(actualValues, expectedValues):
-        p = precision(actualValues, expectedValues)
-        r = recall(actualValues, expectedValues)
+    def f1(predictedValues, expectedValues):
+        p = precision(predictedValues, expectedValues)
+        r = recall(predictedValues, expectedValues)
         num = p * r
         den = p + r
         assert(den != 0)
         f1Score = 2 * (num / den)
         return f1Score
 
-    methods = { "precision": precision,
+    def accuracy(predictedValues, expectedValues):
+        tp = countTruePositive(predictedValues, expectedValues)
+        fp = countFalsePositive(predictedValues, expectedValues)
+        tn = countTrueNegative(predictedValues, expectedValues)
+        fn = countFalseNegative(predictedValues, expectedValues)
+        num =  tp + tn
+        den = tp + tn + fp + fn
+        assert(den != 0)
+        acc = num / den
+        return acc
+
+    methods = { "accuracy" : accuracy,
+                "precision": precision,
                 "recall": recall,
                 "MSE": MSE,
                 "MAE": MAE,
                 "R2": R2,
                 "pearson": pearsonCorr,
-                "f1": f1}
+                "f1": f1,
+                }
 
-    assert(isinstance(actualValues, validListTypes))
+    assert(isinstance(predictedValues, validListTypes))
     assert(isinstance(expectedValues, validListTypes))
-    assert(len(actualValues) != 0)
-    assert(len(actualValues) == len(expectedValues))
+    assert(len(predictedValues) != 0)
+    assert(len(predictedValues) == len(expectedValues))
     assert(method in methods.keys())
 
-    return methods[method](list(actualValues), list(expectedValues))
+    return methods[method](list(predictedValues), list(expectedValues))
 
-def naivePredictor(trainingSet, testingSet, predictorColId, method="regression"):
+def naivePredictor(trainingSet, testingSet, classificationColId, method="regression"):
     assert(type(trainingSet) == pandas.DataFrame)
     assert(type(testingSet) == pandas.DataFrame)
-    assert (keyExists(trainingSet, predictorColId))
-    assert (keyExists(testingSet, predictorColId))
+    assert (keyExists(trainingSet, classificationColId))
+    assert (keyExists(testingSet, classificationColId))
 
     def majority(trainingSet):
-        return mode(trainingSet[predictorColId])
+        modes = mode(trainingSet[classificationColId])[0]
+        return modes[0]
 
     def regress(trainingSet):
-        return np.mean(trainingSet[predictorColId])
+        return np.mean(trainingSet[classificationColId])
 
     methods = {
         "classification" : majority,
@@ -363,6 +411,5 @@ def naivePredictor(trainingSet, testingSet, predictorColId, method="regression")
 
     assert(method in methods)
     return methods[method](trainingSet)
-
 
 
