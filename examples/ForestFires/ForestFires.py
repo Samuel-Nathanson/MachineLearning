@@ -1,7 +1,9 @@
+# Import Libraries
 from lib.PreprocessingTK import *
 import pandas
 import numpy as np
 
+# Read Data with Features
 '''   
    1. X - x-axis spatial coordinate within the Montesinho park map: 1 to 9
    2. Y - y-axis spatial coordinate within the Montesinho park map: 2 to 9
@@ -39,7 +41,6 @@ featureNames = [
 data = pandas.read_csv("../../data/ForestFires/forestfires.data",
                        names=featureNames,
                        skiprows=[0])
-
 # Show original data frame
 print("Original Data Frame")
 print(data)
@@ -49,25 +50,23 @@ nominalFeatures = ["Day", "Month"]
 for nominalFeature in nominalFeatures:
     uniqueValues = np.unique(data[nominalFeature])
     convertNominal(data, nominalFeature, uniqueValues, inplace=True)
-
 # Show updated data frame
-print("Data Frame after converting nominal values to categorical using one-hot encoding")
+print("\nData Frame after converting nominal values to categorical using one-hot encoding")
 print(data)
 
+# Suggestion: Apply a log transformation to the area column.
+# Experiment: Compute skewedness metric to determine skewedness before/after log transformation
 def computePearsonModeSkewedness(arr):
     arrMean = np.mean(arr)
     arrMedian = np.median(arr)
     arrStddev = np.std(arr)
-
     return ((arrMean - arrMedian) / arrStddev)
 
-# Apply a log transformation to the area column.
 beforeSkewedness = computePearsonModeSkewedness(list(data["Area"]))
-print(f"Skewedness before applying log transformation: {beforeSkewedness}")
-
+print(f"\nSkewedness before applying log transformation: {beforeSkewedness}")
+# Apply the log transformation to the area column.
 data["Area"] = data["Area"].map(lambda x: x+2) # Add one to prevent math domain errors (e.g. log2(0))
 data["Area"] = data["Area"].map(lambda x: math.log(x,2))
-
 afterSkewedness = computePearsonModeSkewedness(list(data["Area"]))
 print(f"Skewedness after applying log transformation: {afterSkewedness}")
 
@@ -75,34 +74,38 @@ print(f"Skewedness after applying log transformation: {afterSkewedness}")
 print("Data Frame after applying a logarithm transformation")
 print(data)
 
-# Partition data into 5 folds with equally sized train and test sets (no validation set.)
-folds = partition(data, 5, classificationColumnId=None, includeValidationSet=False, proportions=(0.75,0.25))
-print("Partition data into 5 folds with equally sized train and test sets (no validation set.)")
+# Partition data into folds
+k = 5
+proportions = (0.75, 0.25) # Train / Test proportions
+print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets: Proportions are {str(proportions)})")
+folds = partition(data, k, classificationColumnId=None, includeValidationSet=False, proportions=proportions)
 for i in range(0, len(folds)):
     print(f"Fold {i}, testSize={len(folds[i][0])}, trainSize={len(folds[i][1])}")
 
-yCol = "Area"
-evalRows = []
+# Test our learner
+className = "Area"
+foldEvaluations = []
 for fold in folds:
     trainingSet = fold[0]
     testingSet = fold[1]
-    prediction = naivePredictor(trainingSet, testingSet, classificationColId=yCol, method="regression")
+    # Make a prediction
+    prediction = naivePredictor(trainingSet, testingSet, classificationColId=className, method="regression")
     predicted_scores = [prediction for x in range(0,len(testingSet))]
-    mse = evaluateError(predicted_scores, testingSet[yCol], method="MSE")
-    mae = evaluateError(predicted_scores, testingSet[yCol], method="MAE")
-    r2 = evaluateError(predicted_scores, testingSet[yCol], method="R2")
-    pearson = evaluateError(predicted_scores, testingSet[yCol], method="pearson")
-
-    evalRow = {
+    # Compose a performance evaluation, based on multiple metrics
+    mse = evaluateError(predicted_scores, testingSet[className], method="MSE")
+    mae = evaluateError(predicted_scores, testingSet[className], method="MAE")
+    r2 = evaluateError(predicted_scores, testingSet[className], method="R2")
+    pearson = evaluateError(predicted_scores, testingSet[className], method="pearson")
+    foldEvaluation = {
         'MSE' : mse,
         'MAE' : mae,
         'R2': r2,
         'Pearson': pearson
     }
-    evalRows.append(evalRow)
+    foldEvaluations.append(foldEvaluation)
 
-print("Performance Evaluation")
-evalDf = pandas.DataFrame(evalRows)
+print("\nLearning Performance Evaluation")
+evalDf = pandas.DataFrame(foldEvaluations)
 # evalDf.index.name = 'Fold'
 evalDf = evalDf.rename_axis(index=None, columns='Fold')
-print(evalDf.round(1))
+print(evalDf.round(2))

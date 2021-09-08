@@ -41,7 +41,7 @@ for nominalFeature in nominalFeatures:
     uniqueValues = np.unique(data[nominalFeature])
     convertNominal(data, nominalFeature, uniqueValues, inplace=True)
 # Show updated data frame
-print("Data Frame after converting nominal values to categorical using one-hot encoding")
+print("\nData Frame after converting nominal values to categorical using one-hot encoding")
 print(data)
 
 # Partition data into folds
