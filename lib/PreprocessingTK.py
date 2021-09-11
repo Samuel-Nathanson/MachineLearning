@@ -15,6 +15,21 @@ def keyExists(df, key):
         return False
     return True
 
+
+def dropColumn(dataFrame, columnId, inplace=False):
+    data = dataFrame if inplace else dataFrame.copy(deep=True)
+    # Validate arguments
+    assert (type(data) == pandas.core.frame.DataFrame)
+    assert (type(columnId) == str)
+    assert (keyExists(data, columnId))
+
+    # Delete ID Column
+    data.drop(columnId, axis=1, inplace=True)
+
+    if(not inplace):
+        return data
+
+
 def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"method": "mean"}, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
 
@@ -60,7 +75,7 @@ def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"m
 # dataFrame: Pandas Dataframe
 # columnId: Column ID to replace values with
 # ordinalValueDict: Mapping of ordinal values to integer ordinal values
-def convertToOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
+def convertOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     # Validate arguments
     assert(type(data) == pandas.core.frame.DataFrame)
@@ -170,15 +185,12 @@ def standardize(trainingSetDF, testingSetDF, columnId, inplace=False):
 # includeValidationSet: Boolean True/False - If true, include a validation set within each of the folds
 # proportions: 2-Tuple or 3-Tuple determining ratios of data to use for training, testing, and validation
 #   Defaults to 60% training, 20% testing, and 20% validation
-def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=True, proportions=(0.6,0.2,0.2)):
+def partition(dataFrame, k, classificationColumnId=None):
     assert(type(dataFrame) == pandas.core.frame.DataFrame)
     assert(type(k) == int)
     if(classificationColumnId):
         assert(type(classificationColumnId) == str)
         assert(keyExists(dataFrame, classificationColumnId))
-    if(includeValidationSet):
-        assert((len(proportions) == 3 and includeValidationSet) or (len(proportions == 2) and not includeValidationSet))
-        assert(np.sum(proportions) == 1.0)
 
     foldSize = math.ceil(dataFrame.shape[0] / k)
     folds = []
@@ -189,15 +201,10 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
         uniqueClasses = list(np.unique(dataFrame[classificationColumnId]))
         for classification in uniqueClasses:
             classExamples = dataFrame[dataFrame[classificationColumnId] == classification]
-            #   ensure |Yi|/k >= 1
-            # Caution: If |Sk| < 2 (or 3, with validation set included) then
-            #   we won't be able to distribute values from Sk into training, testing, and validation sets
-            assert(math.floor(len(classExamples) / k) >= (3 if includeValidationSet else 2))
             stratifiedFrames.append(classExamples)
         return stratifiedFrames
 
     frames = [] # frames, which will be moved into folds containing test/train/validation sets
-    folds = []
 
     if(classificationColumnId):
         print('Classification Task')
@@ -227,27 +234,30 @@ def partition(dataFrame, k, classificationColumnId=None, includeValidationSet=Tr
             frame = shuffledFrame[foldNum*foldSize:(foldNum+1)*foldSize]
             frames.append(frame)
 
-    for frame in frames:
-        frame = frame.sample(frac=1, random_state=0).reset_index(drop=True)
-        # Frame values must be shuffled for the classification case.
-        # Extract the training set
-        testingIndex = math.floor(proportions[0] * len(frame))
-        trainingSet = frame[:testingIndex]
+    return frames
 
-        if(includeValidationSet):
-            validationIndex = math.floor(proportions[1] * len(frame) + testingIndex)
-            # Extract Testing Set
-            testingSet = frame[testingIndex:validationIndex]
-
-            # Extract Validation Set
-            validationSet = frame[validationIndex:]
-            folds.append([trainingSet, testingSet, validationSet])
-        else:
-            # Extract Testing Set
-            testingSet = frame[testingIndex:]
-            folds.append([trainingSet, testingSet])
-
-    return folds
+    # for frame in frames:
+    #     # Shuffle
+    #     frame = frame.sample(frac=1, random_state=0).reset_index(drop=True)
+    #     # Frame values must be shuffled for the classification case.
+    #     # Extract the training set
+    #     testingIndex = math.floor(proportions[0] * len(frame))
+    #     trainingSet = frame[:testingIndex]
+    #
+    #     if(includeValidationSet):
+    #         validationIndex = math.floor(proportions[1] * len(frame) + testingIndex)
+    #         # Extract Testing Set
+    #         testingSet = frame[testingIndex:validationIndex]
+    #
+    #         # Extract Validation Set
+    #         validationSet = frame[validationIndex:]
+    #         folds.append([trainingSet, testingSet, validationSet])
+    #     else:
+    #         # Extract Testing Set
+    #         testingSet = frame[testingIndex:]
+    #         folds.append([trainingSet, testingSet])
+    #
+    # return folds
 
 # predictedValues: list or nparray of values
 # expectedValues: list or nparray of values (must be same length as predictedValues)

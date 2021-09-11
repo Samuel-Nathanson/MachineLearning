@@ -60,18 +60,18 @@ print(data)
 
 # Partition data into folds
 k = 5
-proportions = (0.75, 0.25) # Train / Test proportions
-print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets: Proportions are {str(proportions)})")
-folds = partition(data, k, classificationColumnId=None, includeValidationSet=False, proportions=proportions)
+print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets.")
+folds = partition(data, k, classificationColumnId=None)
 for i in range(0, len(folds)):
-    print(f"Fold {i}, testSize={len(folds[i][0])}, trainSize={len(folds[i][1])}")
+    print(f"Fold {i}, size={len(folds[i])}")
 
 # Test our learner
 className = "ERP"
 foldEvaluations = []
-for fold in folds:
-    trainingSet = fold[0]
-    testingSet = fold[1]
+for i in range(0,k):
+    testingSet = folds.pop(i)
+    trainingSet = pandas.concat(folds, ignore_index=True)
+    folds.insert(i, testingSet)
     prediction = naivePredictor(trainingSet, testingSet, classificationColId="ERP", method="regression")
     predicted_scores = [prediction for x in range(0,len(testingSet))]
     mse = evaluateError(predicted_scores, testingSet[className], method="MSE")

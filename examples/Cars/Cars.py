@@ -52,7 +52,7 @@ ordinalValueDict = {
     }
 }
 for featureName in ordinalValueDict.keys():
-    convertToOrdinal(data, featureName, ordinalValueDict[featureName], inplace=True)
+    convertOrdinal(data, featureName, ordinalValueDict[featureName], inplace=True)
 # Show updated data frame
 print("\nData Frame after converting ordinal values to integer")
 print(data)
@@ -60,13 +60,12 @@ print(data)
 # Partition data into folds
 # Stratify by Y class label
 k = 5
-proportions = (0.75, 0.25) # Train / Test proportions
 classColName = "Evaluation"
-print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets: Proportions are {str(proportions)})")
+print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets")
 print(f"Stratifying by values in column: {classColName}")
-folds = partition(data, k, classificationColumnId=classColName, includeValidationSet=False, proportions=proportions)
+folds = partition(data, k, classificationColumnId=classColName)
 for i in range(0, len(folds)):
-    print(f"Fold {i}, testSize={len(folds[i][0])}, trainSize={len(folds[i][1])}")
+    print(f"Fold {i}, size={len(folds[i])}")
 
 # Comment: Could be improved to O(1) by assigning values directly, but this is more general
 # e.g. classLabels = [y0, y1, y2, e.t.c.]
@@ -74,18 +73,20 @@ for i in range(0, len(folds)):
 classLabels = np.unique(data[classColName])
 className = "Evaluation"
 foldEvaluations = []
-for fold in folds:
-    trainingSet = fold[0]
-    testingSet = fold[1]
+for i in range(0,k):
+    testingSet = folds.pop(i)
+    trainingSet = pandas.concat(folds, ignore_index=True)
+    folds.insert(i, testingSet)
+
     foldEvaluation = {}
     for classLabel in classLabels:
         prediction = naivePredictor(trainingSet, testingSet, classificationColId=className, method="classification")
         predicted_scores = [prediction for x in range(0,len(testingSet))] # Using first mode only
 
         accuracy = evaluateError(predicted_scores, testingSet[className], method="accuracy", classLabel=classLabel)
-    # precision = evaluateError(predicted_scores, testingSet["class"], method="precision", classLabel=classLabel)
-    # recall = evaluateError(predicted_scores, testingSet["class"], method="recall", classLabel=classLabel)
-    # f1 = evaluateError(predicted_scores, testingSet["class"], method="f1", classLabel=classLabel)
+        # precision = evaluateError(predicted_scores, testingSet["class"], method="precision", classLabel=classLabel)
+        # recall = evaluateError(predicted_scores, testingSet["class"], method="recall", classLabel=classLabel)
+        # f1 = evaluateError(predicted_scores, testingSet["class"], method="f1", classLabel=classLabel)
 
         foldEvaluation[f'accuracy-{classLabel}'] = accuracy
     foldEvaluations.append(foldEvaluation)

@@ -50,13 +50,12 @@ print(data)
 
 # Partition data into folds
 k = 5
-proportions = (0.75, 0.25) # Train / Test proportions
 classColName = "affiliation"
-print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets: Proportions are {str(proportions)})")
+print(f"\nPartition data into {k} folds with train, test, and (Optional) validation sets")
 print(f"Stratifying by values in column: {classColName}")
-folds = partition(data, k, classificationColumnId=classColName, includeValidationSet=False, proportions=proportions)
+folds = partition(data, k, classificationColumnId=classColName)
 for i in range(0, len(folds)):
-    print(f"Fold {i}, testSize={len(folds[i][0])}, trainSize={len(folds[i][1])}")
+    print(f"Fold {i}, size={len(folds[i])}")
 
 # Comment: Could be improved to O(1) by assigning values directly, but this is more general
 # e.g. classLabels = [y0, y1, y2, e.t.c.]
@@ -64,9 +63,10 @@ for i in range(0, len(folds)):
 classLabels = np.unique(data[classColName])
 className = "affiliation"
 foldEvaluations = []
-for fold in folds:
-    trainingSet = fold[0]
-    testingSet = fold[1]
+for i in range(0,k):
+    testingSet = folds.pop(i)
+    trainingSet = pandas.concat(folds, ignore_index=True)
+    folds.insert(i, testingSet)
     foldEvaluation = {}
     for classLabel in classLabels:
         prediction = naivePredictor(trainingSet, testingSet, classificationColId=className, method="classification")
