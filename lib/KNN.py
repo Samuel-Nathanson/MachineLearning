@@ -1,7 +1,7 @@
 import pandas
 from lib.SNUtils import keyExists, distanceEuclideanL2, validListTypes
 from scipy.stats import mode
-from numpy import mean
+from numpy import mean, array, append
 
 def findKNearestNeighbors(k: int, trainData: pandas.DataFrame, query : validListTypes, yColumnId: str):
     assert(type(k) == int)
@@ -39,14 +39,14 @@ def kNNCondenseTrainingSet(trainData: pandas.DataFrame, yColumnId: str):
         print("Size of Z=" + str(newSizeZ))
         indicesToDrop = []
         for i in range(1, XTrainData.shape[0]):
-            query = pandas.DataFrame(columns=XTrainData.columns).append(XTrainData.iloc[i])
-            nearestNeighborList = findKNearestNeighbors(1, minSetZ, query, yColumnId)
+            query = XTrainData.iloc[i]
+            nearestNeighborList = findKNearestNeighbors(1, minSetZ, query.drop(labels=[yColumnId]), yColumnId)
             # findNearestNeighbors returns a list of tuples (neighborIndex, distance)
             nearestNeighborIdx = nearestNeighborList[0][0]
             # Create DataFrame with nearest neighbor
             nearestNeighbor = pandas.DataFrame(columns=XTrainData.columns).append(minSetZ.iloc[nearestNeighborIdx])
             nearestNeighborClass = nearestNeighbor.iloc[0][yColumnId]
-            queryClass = query.iloc[0][yColumnId]
+            queryClass = query[yColumnId]
 
             if(not (nearestNeighborClass == queryClass)):
                 minSetZ = minSetZ.append(query)
@@ -64,7 +64,6 @@ def predict(k: int, trainData: pandas.DataFrame, query : validListTypes, yColumn
     assert(type(yColumnId) == str)
     assert(type(classify) == bool)
     assert(keyExists(trainData, yColumnId))
-    assert(keyExists(query, yColumnId))
 
     nearestKNeighbors = findKNearestNeighbors(k, trainData, query, yColumnId)
 
@@ -82,15 +81,10 @@ def plotDataSet(k: int, trainData: pandas.DataFrame, yColumnId: str, columnNums:
     from matplotlib.colors import ListedColormap
     # from sklearn import neighbors, datasets
 
+    trainDataDrop = trainData.drop(trainData.columns.difference([trainData.columns[columnNums[0]], trainData.columns[columnNums[1]], yColumnId]), 1)
     # n_neighbors = 15
 
-    # import some data to play with
-    # iris = datasets.load_iris()
-    # X = iris.data[:, :2]  # we only take the first two features. We could
-    # # avoid this ugly slicing by using a two-dim dataset
-    # y = iris.target
-
-    h = .02  # step size in the mesh
+    h = .2  # step size in the mesh
 
     X1 = trainData[trainData.columns[columnNums[0]]]
     X2 = trainData[trainData.columns[columnNums[1]]]
@@ -102,23 +96,26 @@ def plotDataSet(k: int, trainData: pandas.DataFrame, yColumnId: str, columnNums:
                          np.arange(x2Min, x2Max, h))
 
     # Z = predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = array([])
     examples = np.c_[xx.ravel(), yy.ravel()]
+    for example in examples:
+        Z = np.append(Z, predict(k, trainDataDrop, example, yColumnId))
 
     # for example in examples
-    # Z = Z.reshape(xx.shape)
+    Z = Z.reshape(xx.shape)
 
-    cmap_light = ListedColormap(['#FFAAAA', '#AAFFAA', '#AAAAFF'])
-    cmap_bold = ListedColormap(['#FF0000', '#00FF00', '#0000FF'])
+    cmap_light = ListedColormap(['#FFAAAA','#AAAAFF'])
+    cmap_bold = ListedColormap(['#FF0000', '#0000FF'])
 
     plt.figure()
-    plt.pcolormesh(xx, yy, Z, cmap=cmap_light)
+    plt.contourf(xx, yy, Z, cmap=cmap_light)
 
     # Plot also the training points
-    plt.scatter(list(X1), list(X2), list(trainData[trainData.columns[yColumnId]]), cmap=cmap_bold)
-    plt.xlim(xx.min(), xx.max())
-    plt.ylim(yy.min(), yy.max())
+    plt.scatter(list(X1), list(X2), c=list(trainData[yColumnId]), cmap=cmap_bold)
+    plt.xlim(xx.min() - 1, xx.max() + 1)
+    plt.ylim(yy.min() - 1, yy.max() + 1)
 
-    plt.title("3-Class classification (k = %i)")
+    plt.title(f"3-Class classification (k = {k})")
 
     plt.show()
 

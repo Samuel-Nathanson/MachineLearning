@@ -20,5 +20,5 @@ def distanceEuclideanL2(vec1: validListTypes, vec2: validListTypes):
 
     squaredTotal = 0
     for i in range(0, len(vec1)):
-        squaredTotal += pow(float(vec1[i]) + float(vec2[i]), 2)
+        squaredTotal += pow(float(vec1[i]) - float(vec2[i]), 2)
     return sqrt(squaredTotal)
