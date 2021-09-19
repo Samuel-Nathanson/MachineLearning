@@ -2,19 +2,8 @@ import pandas
 import math
 import numpy as np
 import sys
+from lib.SNUtils import keyExists, validListTypes
 from scipy.stats import mode
-
-validListTypes = (pandas.Series, list, np.ndarray)
-#TODO: Clean up comments
-
-# O(1) key lookup function
-def keyExists(df, key):
-    try:
-        df[key]
-    except KeyError:
-        return False
-    return True
-
 
 def dropColumn(dataFrame, columnId, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
@@ -207,7 +196,6 @@ def partition(dataFrame, k, classificationColumnId=None):
     frames = [] # frames, which will be moved into folds containing test/train/validation sets
 
     if(classificationColumnId):
-        print('Classification Task')
         # first, partition training set based on y-label into sets of size [|Y0|,|Y1|...,|YN|]
         stratifiedData = stratify()
 

@@ -21,10 +21,14 @@ Pretty self-explanatory.
 ### assignments/
 You can find a copy of the assignments for this course here.
 
-## submodules/
-The submodules directory contains reports, pulled directly from Overleaf.
+### submodules/
+The submodules directory contains report LaTeX, pulled directly from Overleaf.
 
 ## Machine Learning Reports
+
+### For the grader:
+You can find the reports (5-Minute Video and Paper) in the _Reports_ directory.
+
 ### Pull Reports from Overleaf
 This project contains a submodule, MachineLearningPapers, which can be updated with the following commands:
 ```
