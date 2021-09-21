@@ -3,7 +3,16 @@ from lib.PreprocessingTK import *
 import pandas
 import numpy as np
 
-def preprocessBreastCancer(numFolds: int):
+'''
+preprocessBreastCancer: Preprocesses the breast cancer dataset and returns N folds
+This process..
+1. Drops the ID column 
+2. Imputes missing data
+3. Partitions data into N stratified folds
+@param numFolds : The number of folds to produce
+@return List of pandas DataFrames
+'''
+def preprocessBreastCancer(numFolds: int=5):
     assert(type(numFolds) == int)
     # Read Data with Features
     '''
@@ -60,7 +69,7 @@ if __name__ == "__main__":
         folds.insert(i, testingSet)
         foldEvaluation = {}
         for classLabel in classLabels:
-            prediction = naivePredictor(trainingSet, testingSet, classificationColId=className, method="classification")
+            prediction = naivePredictor(trainingSet, className, method="classification")
             predicted_scores = [prediction for x in range(0,len(testingSet))] # Using first mode only
 
             accuracy = evaluateError(predicted_scores, testingSet[className], method="accuracy", classLabel=classLabel)

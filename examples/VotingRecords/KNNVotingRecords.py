@@ -3,13 +3,7 @@ from lib.PreprocessingTK import *
 import pandas
 import numpy as np
 from lib.KNN import *
-'''
-preprocessVotingRecords: Preprocesses the voting records dataset and returns N folds
-This process..
-1. Partitions data into N stratified folds
-@param numFolds : The number of folds to produce
-@return List of pandas DataFrames
-'''
+
 def preprocessVotingRecords(numFolds):
     # Read Data with Features
     '''
@@ -74,9 +68,14 @@ if __name__ == "__main__":
         folds.insert(i, testingSet)
         foldEvaluation = {}
         for classLabel in classLabels:
-            prediction = naivePredictor(trainingSet, className, method="classification")
-            predicted_scores = [prediction for x in range(0,len(testingSet))] # Using first mode only
+            prediction = naivePredictor(trainingSet, method="classification")
+            predicted_scores = [
+                print(f"{x}/{len(testingSet)}") or predict(k, trainingSet, testingSet.drop(columns=className).iloc[x],
+                                                           className) for x in range(0, len(testingSet))]
             accuracy = evaluateError(predicted_scores, testingSet[className], method="accuracy", classLabel=classLabel)
+            # precision = evaluateError(predicted_scores, testingSet["class"], method="precision", classLabel=classLabel)
+            # recall = evaluateError(predicted_scores, testingSet["class"], method="recall", classLabel=classLabel)
+            # f1 = evaluateError(predicted_scores, testingSet["class"], method="f1", classLabel=classLabel)
 
             # Translate Class Label
             foldEvaluation[f'accuracy-{classLabel}'] = accuracy

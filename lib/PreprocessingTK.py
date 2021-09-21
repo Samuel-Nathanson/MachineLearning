@@ -5,6 +5,12 @@ import sys
 from lib.SNUtils import keyExists, validListTypes
 from scipy.stats import mode
 
+'''
+dropColumn: Drops column in dataframe
+@param1: Pandas.DataFrame: dataFrame - Dataframe to perform operations on
+@param2: str: columnId - Column ID to drop
+@param3: bool: inplace=False - Perform operations inplace
+'''
 def dropColumn(dataFrame, columnId, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     # Validate arguments
@@ -18,7 +24,14 @@ def dropColumn(dataFrame, columnId, inplace=False):
     if(not inplace):
         return data
 
-
+'''
+convertOrdinal - Imputes missing data fields within a data frame
+@param1 dataFrame: Pandas Dataframe
+@param2 string: columnId - Column ID to replace values within
+@param3: array: nullIndicators - List of values considered null, which should be replaced
+@param4: dict: Imputation options. use {"method" : "mean"} or {"method" : "constant"}
+@param5: bool: inplace - Do operations inplace
+'''
 def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"method": "mean"}, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
 
@@ -61,9 +74,14 @@ def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"m
     if(not inplace):
         return data
 
-# dataFrame: Pandas Dataframe
-# columnId: Column ID to replace values with
-# ordinalValueDict: Mapping of ordinal values to integer ordinal values
+
+'''
+convertOrdinal - Converts ordinal values of a dataframe to integer 
+@param1 dataFrame: Pandas Dataframe
+@param2 string: columnId - Column ID to replace values with
+@param3: dict: ordinalValueDict - Mapping of ordinal values to integer values
+@param4: bool: inplace - Do operations inplace
+'''
 def convertOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     # Validate arguments
@@ -79,9 +97,11 @@ def convertOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
     if(not inplace):
         return data
 
+# convertNominal: Converts nominal values of a dataset to one-hot coded values
 # dataFrame: Pandas Dataframe
 # columnId: Column ID to replace nominal values with one-hot encoded values
 # nominalValueList: List of nominal values which represent all possible categorical values in the column
+# inplace: Boolean, do operations in place
 def convertNominal(dataFrame, columnId, nominalValueList, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     assert(type(data) == pandas.core.frame.DataFrame)
@@ -109,14 +129,17 @@ def convertNominal(dataFrame, columnId, nominalValueList, inplace=False):
     if(not inplace):
         return data
 
-# dataFrame: Pandas Dataframe - ** WILL SORT DATA iLoc VALUES **
-# columnId: Column ID to discretize values in
-# xargs: Dictionary of Extra Arguments
-#   dMethod - Discretization Method ("frequency" or "equal-width")
-#       Notes: This discretization method floors values
-#           E.G with four bins over the range [-4,4], the values [-0.7, 0.9, 1.1, 1.9] would transform into [-2, 0, 1, 1]
-#   bins - Number of bins to split data into
-# inplace: Set
+'''
+@discretize - Discretize values in the dataframe
+@param1 dataFrame: - ** WILL SORT DATA iLoc VALUES **
+@param2 str: columnId - Column ID to discretize values in
+@param3 dict: xargs- Dictionary of Extra Arguments
+   dMethod - Discretization Method ("frequency" or "equal-width")
+       Notes: This discretization method floors values
+           E.G with four bins over the range [-4,4], the values [-0.7, 0.9, 1.1, 1.9] would transform into [-2, 0, 1, 1]
+   bins - Number of bins to split data into
+@param bool: inplace=False - Perform operations inplace 
+'''
 def discretize(dataFrame, columnId, xargs={"dMethod": "frequency", "bins": 10}, inplace=False):
     data = dataFrame if inplace else dataFrame.copy(deep=True)
     assert(type(data) == pandas.core.frame.DataFrame)
@@ -145,10 +168,13 @@ def discretize(dataFrame, columnId, xargs={"dMethod": "frequency", "bins": 10}, 
     if(not inplace):
         return data
 
-# trainingSetDF - Pandas DataFrame containing training set
-# testingSetDF - Pandas DataFrame containing testing set
-# columnId: Column ID to replace nominal values with one-hot encoded values
-# @returns tuple of values (trainingSet, testingSet) if inplace=False. None otherwise.
+'''
+@param1 trainingSetDF - Pandas DataFrame containing training set
+@param2 testingSetDF - Pandas DataFrame containing testing set
+@param3 columnId: Column ID to replace nominal values with one-hot encoded values
+@param4 bool : inplace=False - Perform operations in place
+@returns tuple of values (trainingSet, testingSet) if inplace=False. None otherwise.
+'''
 def standardize(trainingSetDF, testingSetDF, columnId, inplace=False):
     trainingSet = trainingSetDF if inplace else trainingSetDF.copy(deep=True)
     testingSet = testingSetDF if inplace else testingSetDF.copy(deep=True)
@@ -224,31 +250,15 @@ def partition(dataFrame, k, classificationColumnId=None):
 
     return frames
 
-    # for frame in frames:
-    #     # Shuffle
-    #     frame = frame.sample(frac=1, random_state=0).reset_index(drop=True)
-    #     # Frame values must be shuffled for the classification case.
-    #     # Extract the training set
-    #     testingIndex = math.floor(proportions[0] * len(frame))
-    #     trainingSet = frame[:testingIndex]
-    #
-    #     if(includeValidationSet):
-    #         validationIndex = math.floor(proportions[1] * len(frame) + testingIndex)
-    #         # Extract Testing Set
-    #         testingSet = frame[testingIndex:validationIndex]
-    #
-    #         # Extract Validation Set
-    #         validationSet = frame[validationIndex:]
-    #         folds.append([trainingSet, testingSet, validationSet])
-    #     else:
-    #         # Extract Testing Set
-    #         testingSet = frame[testingIndex:]
-    #         folds.append([trainingSet, testingSet])
-    #
-    # return folds
-
-# predictedValues: list or nparray of values
-# expectedValues: list or nparray of values (must be same length as predictedValues)
+'''
+evaluateError: Evaluates the error of 
+@param1 predictedValues: list or nparray of values
+@param2 expectedValues: list or nparray of values (must be same length as predictedValues)
+@param3 method: One of "accuracy", "precision", "recall", "MSE", "MAE", "R2", "pearson", "f1"  
+    Note: Pearson, R2, and F1 are not working as expected at the moment
+@param4: Classlabel - For classification tasks, the class label used to evaluate accuracy
+@returns: Error value based on method given
+'''
 def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
     def countTruePositive(predictedValues, expectedValues):
         tp = 0
@@ -389,11 +399,18 @@ def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
 
     return methods[method](list(predictedValues), list(expectedValues))
 
-def naivePredictor(trainingSet, testingSet, classificationColId, method="regression"):
+
+'''
+naivePredictor: Predicts either the mean or mode of the training data
+@param1: trainingSet - Pandas DataFrame containing training set
+@param3: classificationColId: Column ID to determine prediction from
+@param4: method - One of "regression", "classification"
+    if "classification", the mode of the training set is returned
+    if "regression", the mean of the training set is returned
+'''
+def naivePredictor(trainingSet, classificationColId, method="regression"):
     assert(type(trainingSet) == pandas.DataFrame)
-    assert(type(testingSet) == pandas.DataFrame)
     assert (keyExists(trainingSet, classificationColId))
-    assert (keyExists(testingSet, classificationColId))
 
     def majority(trainingSet):
         modes = mode(trainingSet[classificationColId])[0]
