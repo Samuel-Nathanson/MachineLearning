@@ -19,7 +19,7 @@ if __name__ == "__main__":
         folds.insert(i, testingSet)
         # Make a prediction
         predicted_scores = [
-            print(f"{x}/{len(testingSet)}") or predict(k, trainingSet, testingSet.drop(columns=className).iloc[x],
+            predict(k, trainingSet, testingSet.drop(columns=className).iloc[x],
                                                        className) for x in range(0, len(testingSet))]
         # Compose a performance evaluation, based on multiple metrics
         mse = evaluateError(predicted_scores, testingSet[className], method="MSE")

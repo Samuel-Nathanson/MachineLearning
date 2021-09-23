@@ -22,8 +22,6 @@ if __name__ == "__main__":
 
         foldEvaluation = {}
         for classLabel in [classLabels[0]]:
-            prediction = naivePredictor(trainingSet, method="classification")
-
             predicted_scores = [print(x) or kNN.predict(k, trainingSet, testingSet.drop(columns=className).iloc[x], className) for x in range(0, len(testingSet))]  # Using first mode only
 
             accuracy = evaluateError(predicted_scores, testingSet[className], method="accuracy", classLabel=classLabel)
