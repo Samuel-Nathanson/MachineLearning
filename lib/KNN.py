@@ -6,6 +6,47 @@ from numpy import mean, array, append, inf
 import numpy as np
 import sys
 
+
+'''
+chooseBestEpsilon - Chooses best epsilon for training set condensation / edit algorithm
+@param1: pandas.DataFrame: validationSet - Validation set used for accuracy evaluation
+@param2: pandas.DataFrame: trainingSet - Training set to condense or edit
+@param3: str: className - Y Column class name
+@return bestEpsilon: float, bestMSE: float, bestSet: pandas.DataFrame 
+'''
+def chooseBestEpsilon(validationSet: pandas.DataFrame, trainingSet: pandas.DataFrame, yColumnId: str, condensedAlgorithm=True):
+    bestSet = 0
+    bestMSE = np.inf
+    bestEpsilon = 0
+
+    k=3
+
+    # Compute average difference of points
+    dataMax = trainingSet[yColumnId].max()
+    dataMin = trainingSet[yColumnId].min()
+    dataRange = dataMax - dataMin
+    # Class Range
+    avgDiff = dataRange / len(trainingSet[yColumnId])
+
+    idx = 0
+    min = 1
+    max = 5
+    increment = 1
+    for multiplier in np.arange(min, max, increment):
+        subset=None
+        epsilon = multiplier * avgDiff
+        print(f"ChooseBestEpsilon: Epsilon={epsilon} - MaxEpsilon={max*avgDiff}")
+        if(condensedAlgorithm):
+            subset = kNNCondenseTrainingSet(trainingSet, yColumnId, doClassification=False, epsilon=epsilon)
+        else:
+            subset = kNNEditTrainingSet(trainingSet, validationSet, yColumnId, classPredictionValue=None, k=k, doClassification=False, epsilon=epsilon)
+        mse = evaluateMSE(subset, validationSet,yColumnId=yColumnId, k=k)
+        if(mse < bestMSE):
+            bestMSE = mse
+            bestEpsilon = epsilon
+            bestSet = subset
+    return bestEpsilon, bestMSE, bestSet
+
 '''
 chooseBestK: Tuning Function to find the best K
 @param1 Pandas.DataFrame - validationSet - Validation set to test data on
@@ -14,13 +55,16 @@ chooseBestK: Tuning Function to find the best K
 @param4 int maxK: Maximum K to choose
 @return int Best K value
 '''
-def chooseBestK(validationSet: pandas.DataFrame, classPredictionValue: str=None, className: str=None,maxK: int=7):
+def chooseBestK(validationSet: pandas.DataFrame, className: str=None, doClassification=True, classPredictionValue: str=None, maxK: int=7):
     print("Tuning K hyperparameter...")
     numFolds = 5
     validationFolds = partition(validationSet, numFolds, classificationColumnId=className)
+    errorMethod = "accuracy" if doClassification else "MSE"
+    doRegression = not doClassification
 
     bestK = 1
-    bestKAccuracy = 0.0
+    bestKScore = 0.0
+    # Iterate through K values until finding the best one
     for k in range(1, maxK+1, 2):
         foldAccuracies = []
         for i in range(0, numFolds):
@@ -29,19 +73,26 @@ def chooseBestK(validationSet: pandas.DataFrame, classPredictionValue: str=None,
             trainingSet = pandas.concat(validationFolds, ignore_index=True)
             validationFolds.insert(i, testingSet)
 
+            # Make predictions, using the validation set as the testing set
             predicted_scores = []
             for x in range(0, len(testingSet)):
-                sys.stdout.write(f'\rk={k}, fold={i}/{numFolds-1}, query={x}/{len(testingSet)-1}')
+                sys.stdout.write(f'ChooseBestK: \rk={k}, fold={i}/{numFolds-1}, query={x}/{len(testingSet)-1}')
                 prediction = predict(k, trainingSet, testingSet.iloc[x].drop(labels=className), className)
                 predicted_scores.append(prediction)
 
-            foldAccuracy = evaluateError(predicted_scores, testingSet[className], method="accuracy", classLabel=classPredictionValue)
-            foldAccuracies.append(foldAccuracy)
-        meanFoldAccuracy = np.mean(foldAccuracy)
-        if(meanFoldAccuracy > bestKAccuracy):
-            bestKAccuracy = meanFoldAccuracy
+            foldScore = evaluateError(predicted_scores, testingSet[className], method=errorMethod, classLabel=classPredictionValue)
+
+            # Since lower MSE values are desirable, but higher accuracy values are desirable, we multiply
+            # the MSE value by negative 1 in order to use the same comparison for both accuracy and MSE
+            if doRegression:
+                foldScore = -1 * foldScore
+            foldAccuracies.append(foldScore)
+
+        meanfoldScore = np.mean(foldScore)
+        if(meanfoldScore > bestKScore):
+            bestKScore = meanfoldScore
             bestK = k
-        print(f" | acc={meanFoldAccuracy}")
+        print(f" | acc={meanfoldScore}")
     return bestK
 
 
@@ -99,20 +150,25 @@ def kNNEditTrainingSet(trainDataFrame: pandas.DataFrame, \
     assert (keyExists(trainData, yColumnId))
     assert (type(k) == int)
 
-    prevScore = -1.0
-    currScore = 0.0
+    prevScore = float('-inf')
+    currScore = float('-inf')
     prevSize = len(trainData) + 1
     currSize = len(trainData)
-    # If the first condition evaluates to false and the second condition evaluates to true,
-    # could this degrade performance?
+
+    # Perform the KNN-E Algorithm to reduce the size of the training data until
+    # A) The data size does not shrink
+    # B) AND The accuracy of the training set no longer improves, as measured by MSE from a validation set.
+    bestTrainSet = trainData.copy(deep=True)
     while(currScore > prevScore or currSize < prevSize):
         idx = 0
         predictions = []
+
+        # Make a prediction for each row in the training data, using the same training data to predict.
         while idx < len(trainData):
             query = trainData.iloc[idx]
             query.pop(yColumnId)
 
-            sys.stdout.write(f'\rquery={idx}/{len(trainData) - 1}')
+            sys.stdout.write(f'\rkNNEditTrainingSet: Finding mispredicted points - query={idx}/{len(trainData)}')
             sys.stdout.flush()
 
             prediction = predict(k, trainData, query, yColumnId, doClassification)
@@ -120,35 +176,50 @@ def kNNEditTrainingSet(trainDataFrame: pandas.DataFrame, \
 
             idx += 1
 
+        # Drop any points where the predicted classification does not match the class OR the regression prediction has
+        # an error higher than epsilon
         indicesToDrop = []
         for i in range(0, len(predictions)):
             shouldDrop = (predictions[i] != trainData.iloc[i][yColumnId]) \
                 if doClassification else (np.abs(predictions[i] - trainData.iloc[i][yColumnId]) > epsilon)
             if shouldDrop:
                 indicesToDrop.append(i)
-
+        print(f'\rkNNEditTrainingSet: Dropping {len(indicesToDrop)} points')
         trainData = trainData = trainData.drop(trainData.index[indicesToDrop])
 
+        # Assess the size of the new data set.
+        prevSize = currSize
+        currSize = len(trainData)
+
+        # Assess the accuracy or MSE using the new training data on the validation set.
         predictions = []
+        prevScore = currScore
         for i in range(0, len(validationData)):
+            sys.stdout.write(
+            f'\rkNNEditTrainingSet: Assessing accuracy of new training data using validation data points - query={i}/{len(validationData)}')
             validationPoint = validationData.iloc[i].copy(deep=True)
             validationPoint.pop(yColumnId)
             prediction = predict(3, trainData, validationPoint, yColumnId, doClassification)
             predictions.append(prediction)
-
-        prevSize = currSize
-        currSize = len(trainData)
-
-        prevScore = currScore
-
+        print("\n")
         if (doClassification):
             currScore = evaluateError(predictions, validationData[yColumnId], method="accuracy",
                                              classLabel=classPredictionValue)
         else:
             currScore = -1 * evaluateMSE(trainData, validationData, yColumnId)
-        print(f" | score={currScore}")
 
+        if(currScore > prevScore):
+            bestTrainSet = trainData.copy(deep=True)
+        else:
+            trainData = bestTrainSet
+            if (not inplace):
+                return trainData
 
+        print(f'\nKNNEditTrainingSet: Assessed new accuracy and size of training data')
+
+        print(f"KNNEditTrainingSet: PrevSize = {prevSize}, CurrSize = {currSize}, PrevScore={prevScore}, New score={currScore}")
+
+    trainData = bestTrainSet
 
     if(not inplace):
         return trainData
@@ -160,7 +231,7 @@ EvaluateMSE
 @param3 : str - yColumnId 
 @return : float - accuracy 
 '''
-def evaluateMSE(trainData: pandas.DataFrame, testData: pandas.DataFrame, yColumnId: str):
+def evaluateMSE(trainData: pandas.DataFrame, testData: pandas.DataFrame, yColumnId: str, k: int=3):
     assert (type(trainData) == pandas.DataFrame)
     assert (type(testData) == pandas.DataFrame)
     assert(type(yColumnId) == str)
@@ -170,7 +241,7 @@ def evaluateMSE(trainData: pandas.DataFrame, testData: pandas.DataFrame, yColumn
     for i in range(0, len(testData)):
         testPoint = testData.iloc[i].copy(deep=True)
         testPoint.pop(yColumnId)
-        prediction = predict(1, trainData, testPoint, yColumnId)
+        prediction = predict(k, trainData, testPoint, yColumnId)
         predictions.append(prediction)
 
     mse = evaluateError(predictions, testData[yColumnId], method="MSE")

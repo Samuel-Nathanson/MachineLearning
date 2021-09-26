@@ -200,7 +200,7 @@ def standardize(trainingSetDF, testingSetDF, columnId, inplace=False):
 # includeValidationSet: Boolean True/False - If true, include a validation set within each of the folds
 # proportions: 2-Tuple or 3-Tuple determining ratios of data to use for training, testing, and validation
 #   Defaults to 60% training, 20% testing, and 20% validation
-def partition(dataFrame, k, classificationColumnId=None):
+def partition(dataFrame: pandas.DataFrame, k: int, classificationColumnId=None):
     assert(type(dataFrame) == pandas.core.frame.DataFrame)
     assert(type(k) == int)
     if(classificationColumnId):
