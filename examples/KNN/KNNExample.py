@@ -23,7 +23,7 @@ chooseBestEpsilon - Chooses best epsilon for training set condensation / edit al
 @param3: str: className - Y Column class name
 @return bestEpsilon: float, bestMSE: float, bestSet: pandas.DataFrame 
 '''
-def chooseBestEpsilon(validationSet: pandas.DataFrame, trainingSet: pandas.DataFrame, className: str):
+def chooseBestEpsilon(validationSet: pandas.DataFrame, trainingSet: pandas.DataFrame, className: str, condensedAlgorithm=True):
     bestSet = 0
     bestMSE = np.inf
     bestEpsilon = 0
@@ -37,12 +37,16 @@ def chooseBestEpsilon(validationSet: pandas.DataFrame, trainingSet: pandas.DataF
     classRange = classMax - classMin
     idx = 0
     for epsilon in np.arange(min, max, increment):
-        condensed = kNNCondenseTrainingSet(trainingSet, className, doClassification=False, epsilon=epsilon * classRange)
-        mse = evaluateMSE(condensed, validationSet,yColumnId=className)
+        subset=None
+        if(condensedAlgorithm):
+            subset = kNNCondenseTrainingSet(trainingSet, className, doClassification=False, epsilon=epsilon * classRange)
+        else:
+            subset = kNNEditTrainingSet(trainingSet, validationSet, className, classPredictionValue=None, k=3, doClassification=False, epsilon=epsilon * classRange)
+        mse = evaluateMSE(subset, validationSet,yColumnId=className)
         if(mse < bestMSE):
             bestMSE = mse
             bestEpsilon = epsilon * classRange
-            bestSet = condensed
+            bestSet = subset
     return bestEpsilon, bestMSE, bestSet
 
 '''
@@ -67,10 +71,9 @@ def runKNNExperiment(folds, className, doRegression=True, classPredictionValue=N
         k = chooseBestK(validationSet, classPredictionValue, className , maxK=7) if k==None else k
         print(f"Chose K Value of {k}")
     else: # If we are performing regression..
-        if(doCondensedAlgorithm):
-            print("Choosing best Epsilon Value")
-            epsilon, mse, condensed = chooseBestEpsilon(validationSet, pandas.concat(folds, ignore_index=True), className)
-            print(f"Chose Epsilon Value of {epsilon}")
+        print("Choosing best Epsilon Value")
+        epsilon, mse, condensed = chooseBestEpsilon(validationSet, pandas.concat(folds, ignore_index=True), className, condensedAlgorithm=doCondensedAlgorithm)
+        print(f"Chose Epsilon Value of {epsilon}")
 
     foldAccuracies = []
 
@@ -129,7 +132,7 @@ if __name__ == "__main__":
 
     # Other Algorithms
     doCondensedAlgorithm = False
-    doEditedAlgorithm = False
+    doEditedAlgorithm = True
 
     # Options
     doDecisionPlots = False

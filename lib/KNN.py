@@ -2,7 +2,8 @@ import pandas
 from lib.SNUtils import keyExists, distanceEuclideanL2, validListTypes
 from lib.PreprocessingTK import *
 from scipy.stats import mode
-from numpy import mean, array, append
+from numpy import mean, array, append, inf
+import numpy as np
 import sys
 
 '''
@@ -43,6 +44,7 @@ def chooseBestK(validationSet: pandas.DataFrame, classPredictionValue: str=None,
         print(f" | acc={meanFoldAccuracy}")
     return bestK
 
+
 '''
 findNearestNeighbors: Finds the k nearest neighbors 
 Runs in O(N*Log(N)) Time
@@ -73,66 +75,80 @@ def findKNearestNeighbors(k: int, trainData: pandas.DataFrame, query : validList
 
     return sortedNeighbors[0:k]
 
+
 '''
 kNNEditTrainingSet - Edits the training set by removing misclassified points
 @param1 pandas.DataFrame : trainData - Training Data Set.
-@par
-@param2 str: className - Y Column ID to classify on
+@param2 - 
+@param2 str: yColumnId - Y Column ID to classify on
 @param3 int: k - Number of neighbors for KNN classification
 '''
-def kNNEditTrainingSet(trainDataFrame: pandas.DataFrame, validationData: pandas.DataFrame, className: str, classPredictionValue=None, k=3, inplace=False):
+def kNNEditTrainingSet(trainDataFrame: pandas.DataFrame, \
+                       validationData: pandas.DataFrame, \
+                       yColumnId: str, \
+                       classPredictionValue: str=None, \
+                       k: int=3, \
+                       epsilon: float=0.1,
+                       doClassification: bool=True,
+                       inplace: bool=False):
+
     trainData = trainDataFrame if inplace else trainDataFrame.copy(deep=True)
 
     assert (type(trainData) == pandas.DataFrame)
-    assert(type(className) == str)
-    assert (keyExists(trainData, className))
+    assert (type(yColumnId) == str)
+    assert (keyExists(trainData, yColumnId))
     assert (type(k) == int)
 
-    prevAccuracy = -1.0
-    currAccuracy = 0.0
+    prevScore = -1.0
+    currScore = 0.0
     prevSize = len(trainData) + 1
     currSize = len(trainData)
     # If the first condition evaluates to false and the second condition evaluates to true,
     # could this degrade performance?
-    while(currAccuracy > prevAccuracy or currSize < prevSize):
+    while(currScore > prevScore or currSize < prevSize):
         idx = 0
         predictions = []
         while idx < len(trainData):
             query = trainData.iloc[idx]
-            query.pop(className)
+            query.pop(yColumnId)
 
             sys.stdout.write(f'\rquery={idx}/{len(trainData) - 1}')
             sys.stdout.flush()
 
-            tmp = trainData.pop(idx)
-            prediction = predict(k, trainData, query, className)
-            trainData.insert(idx, tmp)
+            prediction = predict(k, trainData, query, yColumnId, doClassification)
             predictions.append(prediction)
 
             idx += 1
 
         indicesToDrop = []
         for i in range(0, len(predictions)):
-            if(predictions[i] != trainData.iloc[i][className]):
+            shouldDrop = (predictions[i] != trainData.iloc[i][yColumnId]) \
+                if doClassification else (np.abs(predictions[i] - trainData.iloc[i][yColumnId]) > epsilon)
+            if shouldDrop:
                 indicesToDrop.append(i)
 
-        trainData = trainData.drop(labels=indicesToDrop, axis=0)
+        trainData = trainData = trainData.drop(trainData.index[indicesToDrop])
 
         predictions = []
         for i in range(0, len(validationData)):
             validationPoint = validationData.iloc[i].copy(deep=True)
-            validationPoint.pop(className)
-            prediction = predict(3, trainData, validationPoint, className)
+            validationPoint.pop(yColumnId)
+            prediction = predict(3, trainData, validationPoint, yColumnId, doClassification)
             predictions.append(prediction)
 
-
         prevSize = currSize
-        prevAccuracy = currAccuracy
-        currAccuracy = evaluateError(predictions, validationData[className], method="accuracy",
-                                         classLabel=classPredictionValue)
         currSize = len(trainData)
 
-        print(f" | acc={currAccuracy}")
+        prevScore = currScore
+
+        if (doClassification):
+            currScore = evaluateError(predictions, validationData[yColumnId], method="accuracy",
+                                             classLabel=classPredictionValue)
+        else:
+            currScore = -1 * evaluateMSE(trainData, validationData, yColumnId)
+        print(f" | score={currScore}")
+
+
 
     if(not inplace):
         return trainData
