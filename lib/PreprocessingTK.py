@@ -48,8 +48,8 @@ def imputeData(dataFrame, columnId, nullIndicators=[np.NaN, '?'], imputation={"m
                 exit(1)
 
         assert(not(count == 0))
-        mean = sum / count
-        data[columnId].replace(nullIndicators, mean, inplace=True)
+        mean = float(sum / count)
+        data[columnId] = pandas.to_numeric(data[columnId].replace(nullIndicators, mean, inplace=False))
 
     def constantReplacement():
         assert(keyExists(imputation, "constant"))
