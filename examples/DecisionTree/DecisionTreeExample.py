@@ -27,13 +27,13 @@ from lib.DecisionTree import DecisionTree, ID3ClassificationTree, CARTRegression
 if __name__ == "__main__":
 
     # Classification
-    doBreastCancer = True
+    doBreastCancer = False
     doCarEvaluations = False
     do1984VotingRecords = False
 
     # Regression
     doForestFires = False
-    doMachine = False
+    doMachine = True
     doAbalone = False
 
     '''
@@ -99,6 +99,7 @@ if __name__ == "__main__":
     '''
     numFolds = 5
     doPostPruning = True
+    doThresholdTuning = True
 
     ''' 
     Iterate through each experiment to either skip or run
@@ -117,22 +118,34 @@ if __name__ == "__main__":
             folds = experiment["preprocessFunc"](numFolds)
             print(f"Separated data into {len(folds)} folds, sizes {[x.shape for x in folds]}")
 
-
-        if(doPostPruning):
-            pruningSet = folds.pop(0)
+        if(experiment["task"] == "classification"):
+            # TODO: Implement nominal value handling for ID3
+            testingSet = folds.pop(0) # Testing Set
+            pruningSet = folds.pop(0) # Pruning Set, unused for experiments without pruning
             trainingSet = pandas.concat(folds)
             xargs = {
-                "ReducedErrorPruning": True,
-                "PruningSet": pruningSet,
+                "PruningSet": pruningSet if doPostPruning else None,
                 "NominalValues": experiment["nominalValues"]
             }
             clf = ID3ClassificationTree()
             clf.train(trainingSet=trainingSet, yCol=experiment["yCol"], xargs=xargs)
-            print(clf)
+
+            print(f"ID3 Decision Tree constructed {'and pruned' if doPostPruning else ''}")
+            testingAccuracy = clf.score(testingSet)
+            print(f"ID3 Decision Tree accuracy on testing set = {testingAccuracy}")
+        elif(experiment["task"] == "regression"):
+            testingSet = folds.pop(0) # Testing Set
+            tuningSet = folds.pop(0) # Validation/Tuning Set
+            trainingSet = pandas.concat(folds)
+            xargs = {
+                "tuningSet": tuningSet if doThresholdTuning else None,
+                "NominalValues": experiment["nominalValues"]
+            }
+            clf = CARTRegressionTree()
+            clf.train(trainingSet=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+            print(f"CART Decision Tree constructed {'and tuned' if doThresholdTuning else ''}")
+            testingAccuracy = clf.score(testingSet)
+            print(f"CART Decision Tree accuracy on testing set = {testingAccuracy}")
 
         print(f"Successfully ran {experiment['experimentName']}")
         print("====****====****====****====****====****====****====\n\n")
-
-
-
-
