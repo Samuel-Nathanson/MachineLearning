@@ -28,13 +28,12 @@ class DecisionNode(object):
             retVal = ""
             if (self.data["type"] == "leaf"):
                 # If the node is a leaf, set the return value to the leaf value and #examples covered
-                retVal = f"Leaf: value={self.data['value']}. N={self.data['numExamples']}\n"
+                retVal = f"Leaf: value={self.data['value']}. #Examples={len(self.data['examples'])}\n"
             elif (self.data["type"] == "rule"):
-                # Else if the node is a rule, set the return value to "split on attribute=value, N=#examples"
-                numExamples = self.data['numExamples']
+                # Else if the node is a rule, set the return value to "split on attribute=value"
                 splitAttribute = self.data['splitAttribute']
                 splitValue = self.data['splitValue'] if self.data['splitValue'] else 'Nominal Categorical'
-                retVal = f"Rule: split on {splitAttribute}={splitValue}. N={numExamples}\n"
+                retVal = f"Rule: split on {splitAttribute}={splitValue}. #Examples={len(self.data['examples'])}\n"
             else:
                 # Otherwise, this node is bad, raise an exception
                 raise Exception("Can not print node without leaf or rule type!")
@@ -91,28 +90,28 @@ class DecisionNode(object):
             if(key in self.data):
                 self.data.pop(key)
                 self.data.pop('id')
-
         nodeList.append(self)
-
-        children = self.children
-
+        # Recursively Mark all subtrees
         if (self.children):
             # Recursively mark all children
-            for i in range(0, len(children)):
+            for i in range(0, len(self.children)):
                 self.children[i].markNodes(key=key, value=value, nodeList=nodeList)
-        else:
-            return
+        return
 
-        return nodeList
 
     def getSubtreeClassCounts(self):
+        '''
+        This function should only be used for ID3 Decision Trees
+        :return: Class Counts
+        '''
         type = self.data["type"]
         if(type == "leaf"):
+            # TODO: Investigate whether the counts for pruned / merged branches are taken into account
             if("subtreeClassCounts" in self.data.keys()):
                 return self.data["subtreeClassCounts"]
             else:
                 return {
-                    self.data["value"] : self.data["numExamples"]
+                    self.data["value"] : len(self.data["examples"])
                 }
         else:
             subtreeCounts = {}
@@ -157,9 +156,8 @@ class DecisionTree(object):
         '''Virtual method: Make a prediction for examples E'''
         raise NotImplementedError()
 
-
 class ID3ClassificationTree(DecisionTree):
-    pruningSet = None
+    tuningSet = None
     entropyThreshold = 0.0
 
     def __init__(self):
@@ -332,7 +330,7 @@ class ID3ClassificationTree(DecisionTree):
         if(currtEntropy <= self.entropyThreshold):
             leafNode = DecisionNode()
             leafNode.children = None
-            leafNode.data = {"type": "leaf", "value": scipy.stats.mode(examples[self.yCol])[0][0], "numExamples": len(examples)}
+            leafNode.data = {"type": "leaf", "value": scipy.stats.mode(examples[self.yCol])[0][0], "examples": examples}
             leafNode.parent = parentNode
             return leafNode
         else:
@@ -385,7 +383,7 @@ class ID3ClassificationTree(DecisionTree):
                             bestSplitVal = splitPoint
 
             decisionNode = DecisionNode()
-            decisionNode.data = {"type": "rule", "splitAttribute": bestAttribute, "splitValue": bestSplitVal, "numExamples": len(examples)}
+            decisionNode.data = {"type": "rule", "splitAttribute": bestAttribute, "splitValue": bestSplitVal, "examples": examples}
             decisionNode.parent = parentNode
 
             if(bestSplitVal == None):
@@ -406,11 +404,6 @@ class ID3ClassificationTree(DecisionTree):
                 # Append new child nodes onto this node
                 decisionNode.children.append(childNode1)
                 decisionNode.children.append(childNode2)
-            d = 0
-            p = parentNode
-            while(p !=None):
-                d +=1
-                p = p.parent
 
             return decisionNode
 
@@ -475,3 +468,232 @@ class ID3ClassificationTree(DecisionTree):
         '''
         return infoGain / intrinsicValue
 
+
+class CARTRegressionTree(DecisionTree):
+
+
+    def __init__(self):
+        super().__init__()
+        self.pruningSet = None
+        self.mseThreshold = 0.0
+    def __repr__(self):
+        return super().__repr__()
+    def __str__(self):
+        return super().__str__()
+
+    def train(  self,
+                trainingSet: pandas.DataFrame, \
+                yCol: str, \
+                xargs: dict={"TuningSet": None, "NominalValues": []}):
+        super().train(trainingSet=trainingSet, yCol=yCol, xargs=xargs)
+        self.tuningSet = xargs["TuningSet"]
+
+        # Generate the decision tree
+        #
+        if(self.xargs["TuningSet"].empty):
+            self.tree = self.generateTree(trainingSet, None)
+        else:
+            print("Tuning MSE Threshold for CART Regression Tree..")
+            bestMSEThreshold = 0.0
+            bestTreeMSE = np.inf
+            bestCandidateTree = None
+            # Compute average difference of points
+            dataRange = trainingSet[self.yCol].max() -  trainingSet[self.yCol].min()
+            avgDiff = dataRange / len(trainingSet[self.yCol])
+            min = 1
+            max = 3
+
+            t2 = copy.deepcopy(self) # Used only for scoring
+
+            for mseThreshold in np.arange(min, max):
+                print(f"Building CART Regression Tree with MSE Threshold={mseThreshold}")
+                self.mseThreshold = mseThreshold
+                candidateTree = self.generateTree(trainingSet, None)
+
+                # Compute Score by building a CART Tree
+                t2.tree = candidateTree
+                treeMSE = t2.score(self.xargs["TuningSet"])
+
+                if(treeMSE < bestTreeMSE):
+                    print(f"Candidate tree MSE ({treeMSE}) < previous best candidate tree MSE ({bestTreeMSE}) - New Best Candidate")
+                    bestTreeMSE = treeMSE
+                    bestCandidateTree = candidateTree
+                    bestMSEThreshold = mseThreshold
+                else:
+                    print(f"Passing this candidate: tree MSE ({treeMSE}) > best candidate tree MSE ({bestTreeMSE})")
+
+            self.tree = bestCandidateTree
+
+    def predict(self,
+                example: pandas.Series):
+        '''
+        Predict the values of a set of examples using the ID3DecisionTree
+        :param example: Example to predict.
+        :return: data frame of predictions
+        '''
+        def dfsTraversal(node: DecisionNode, example: pandas.DataFrame, verbose=False):
+            try:
+                data = node.data
+            except:
+                print(node)
+            nodeType = data["type"]
+            if(nodeType == "rule"):
+                # Branch further if this node is a rule
+                attribute = data["splitAttribute"]
+                splitValue = data["splitValue"]
+                isNominal = splitValue == None
+
+                if(isNominal):
+                    raise NotImplementedError
+                    # TODO: Implement
+                else:
+                    if(example[attribute] < splitValue):
+                        if(verbose):
+                            print(f"test[\"{attribute}\"] < {splitValue}: True")
+                        return dfsTraversal(node.children[0], example) # TODO: Modify param to DF
+                    else:
+                        if(verbose):
+                            print(f"test[\"{attribute}\"] < {splitValue}: False")
+                        return dfsTraversal(node.children[1], example)
+            elif(nodeType == "leaf"):
+                if(verbose):
+                    print(f"Reached leaf with value: {data['value']}")
+                # Return data value if this node is a leaf
+                return data["value"]
+            else:
+                # Otherwise, this node is bad, raise an exception
+                raise Exception("Node without leaf or rule type!!")
+
+        if(self.tree == None):
+            raise Exception("Tree not built - Please train with DecisionTree.train(...)")
+
+        return dfsTraversal(self.tree, example)
+
+
+    def score(self, testingSet):
+        '''
+        Scores the MSE of the CART Decision Tree
+        :param testingSet: Testing set to work with
+        :return: returns MSE
+        '''
+        predictedScores = []
+        for x in range(0, len(testingSet)):
+            prediction = self.predict(testingSet.iloc[x])
+            predictedScores.append(prediction)
+        method = "MSE"
+        mse = evaluateError(predictedScores, testingSet[self.yCol], method=method)
+        return mse
+
+
+    def generateTree(self,
+                     examples: pandas.DataFrame,
+                     node: DecisionNode=None):
+        '''
+        Generate the ID3 Decision Tree
+        :param examples: Example training data
+        :param node: Parent Node, which this tree will append children to.
+        :return: DecisionNode
+        '''
+
+        parentNode = node
+        # If the group has MSE lower than the MSE threshold, create a leaf node.
+        currtMSE = self.computeMSE([examples])
+        if(currtMSE <= self.mseThreshold):
+            leafNode = DecisionNode()
+            leafNode.children = None
+            leafNode.data = {"type": "leaf", "value": np.mean(examples[self.yCol]), "examples": examples}
+            leafNode.parent = parentNode
+            return leafNode
+        else:
+            maxMSEReduction = 0
+            bestAttribute = None
+            bestSplitVal = None
+
+            attributes = examples.columns.drop(self.yCol)
+            for attribute in attributes:
+                if(attribute in self.xargs["NominalValues"]):
+                    uniqueValues = np.unique(examples[attribute])
+                    '''Compute Information Gain Ratio of splitting on this categorical attribute'''
+                    splits = [examples[examples[attribute] == uniqueValue] for uniqueValue in \
+                              np.unique(examples[attribute])]
+                    totalMSE = self.computeMSE(splits)
+
+                    '''Compute MSE Reduction'''
+                    mseReduction = currtMSE - totalMSE
+
+                    '''If this is the best MSE Reduction we've seen so far, note it'''
+                    if(mseReduction > maxMSEReduction):
+                        maxMSEReduction = mseReduction
+                        bestAttribute = attribute
+                        bestSplitVal = None
+                else:
+                    # Sort examples by attribute value
+                    e = np.unique(examples.sort_values(by=[attribute])[attribute])
+                    # Find a set of unique split points to test
+                    splitPoints = np.unique([(e[i] + e[i+1]) / 2 for i in range(0, len(e)-1)])
+                    # Iterate over each possible split
+                    for splitPoint in splitPoints:
+                        '''Split on each point and compute total MSE'''
+                        split1 = examples[examples[attribute] <= splitPoint]
+                        split2 = examples[examples[attribute] > splitPoint]
+                        splits = [split1, split2]
+                        totalMSE = self.computeMSE(splits)
+
+                        '''Compute MSE Reduction'''
+                        mseReduction = currtMSE - totalMSE
+
+                        '''If this is the best MSE Reduction we've seen so far, note it'''
+                        if(mseReduction > maxMSEReduction):
+                            maxMSEReduction = mseReduction
+                            bestAttribute = attribute
+                            bestSplitVal = splitPoint
+
+            decisionNode = DecisionNode()
+            decisionNode.data = {"type": "rule", "splitAttribute": bestAttribute, "splitValue": bestSplitVal, "examples": examples}
+            decisionNode.parent = parentNode
+
+            if(bestSplitVal == None):
+                # Nominal Feature
+                branchValues = np.unique(examples[bestAttribute])
+                for value in branchValues:
+                    branchExamples = examples[examples[bestAttribute] == value]
+                    # Now, generate the tree recursively
+                    childNode = self.generateTree(branchExamples, decisionNode)
+                    # Append new child nodes onto this node
+                    decisionNode.children.append(childNode)
+            else:
+                split1 = examples[examples[bestAttribute] <= bestSplitVal]
+                split2 = examples[examples[bestAttribute] > bestSplitVal]
+                # Now, generate the tree recursively
+                childNode1 = self.generateTree(split1, decisionNode)
+                childNode2 = self.generateTree(split2, decisionNode)
+                # Append new child nodes onto this node
+                decisionNode.children.append(childNode1)
+                decisionNode.children.append(childNode2)
+
+            return decisionNode
+
+    def computeMSE(self,
+                       partitions: list[pandas.DataFrame]):
+        '''
+        Computes MSE of multiple partitions containing class examples
+        :param partitions: List of pandas.DataFrame
+        :return: Entropy of partitions
+        '''
+        # Find the number of total examples
+        totalExamples = np.sum([len(x) for x in partitions])
+
+        # Variable to store the total entropy
+        totalSE = 0
+
+        # Compute total entropy
+        for partition in partitions:
+            partitionSE = 0
+            exampleMean = np.mean(partition[self.yCol]) # TODO: Genericize
+            for index, example in partition.iterrows():
+                partitionSE += (example[self.yCol] - exampleMean) ** 2
+            totalSE += partitionSE
+        totalMSE = totalSE / totalExamples
+
+
+        return totalMSE

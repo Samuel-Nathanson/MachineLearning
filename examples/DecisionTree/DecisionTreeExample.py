@@ -22,7 +22,7 @@ from examples.ForestFires.ForestFires import preprocessForestFires
 from examples.Abalone.Abalone import preprocessAbalone
 from examples.Machine.Machine import preprocessMachine
 
-from lib.DecisionTree import DecisionTree, ID3ClassificationTree, CARTRegressionTree
+from lib.DecisionTree import ID3ClassificationTree, CARTRegressionTree
 
 if __name__ == "__main__":
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             "experimentName": "Machine Performance",
             "preprocessFunc": preprocessMachine,
             "runExperiment": doMachine,
-            "nominalValues": ["VendorName", "ModelName"]
+            "nominalValues": []
         }
     }
 
@@ -138,11 +138,12 @@ if __name__ == "__main__":
             tuningSet = folds.pop(0) # Validation/Tuning Set
             trainingSet = pandas.concat(folds)
             xargs = {
-                "tuningSet": tuningSet if doThresholdTuning else None,
+                "TuningSet": tuningSet if doThresholdTuning else None,
                 "NominalValues": experiment["nominalValues"]
             }
             clf = CARTRegressionTree()
             clf.train(trainingSet=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+
             print(f"CART Decision Tree constructed {'and tuned' if doThresholdTuning else ''}")
             testingAccuracy = clf.score(testingSet)
             print(f"CART Decision Tree accuracy on testing set = {testingAccuracy}")

@@ -46,11 +46,16 @@ def preprocessMachine(numFolds=5):
     data = pandas.read_csv("../../data/Machine/machine.data",
                            names=featureNames)
 
+    dropColumns = ["ModelName", "VendorName"]
+
+    for column in dropColumns:
+        dropColumn(data, column, inplace=True)
+
     # Convert nominal data to categorical using one-hot encoding
-    nominalFeatures = ["VendorName", "ModelName"]
-    for nominalFeature in nominalFeatures:
-        uniqueValues = np.unique(data[nominalFeature])
-        convertNominal(data, nominalFeature, uniqueValues, inplace=True)
+    # nominalFeatures = ["VendorName"]
+    # for nominalFeature in nominalFeatures:
+    #     uniqueValues = np.unique(data[nominalFeature])
+    #     convertNominal(data, nominalFeature, uniqueValues, inplace=True)
 
     # Partition data into folds
     folds = partition(data, numFolds, classificationColumnId=None)
