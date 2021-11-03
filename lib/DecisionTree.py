@@ -170,14 +170,14 @@ class ID3ClassificationTree(DecisionTree):
     def train(  self,
                 trainingSet: pandas.DataFrame, \
                 yCol: str, \
-                xargs: dict={"PruningSet": None, "NominalValues": []}):
+                xargs: dict={"PruningSet": None, "CategoricalValues": []}):
         super().train(trainingSet=trainingSet, yCol=yCol, xargs=xargs)
         self.pruningSet = xargs["PruningSet"]
 
         # Generate the decision tree
         self.tree = self.generateTree(trainingSet, None)
 
-        if(not self.xargs["PruningSet"].empty):
+        if(type(self.xargs["PruningSet"]) == pandas.DataFrame):
             self.postPruneTree()
 
     def predict(self,
@@ -188,7 +188,7 @@ class ID3ClassificationTree(DecisionTree):
         :return: data frame of predictions
         '''
 
-        def dfsTraversal(node: DecisionNode, example: pandas.DataFrame, verbose=False):
+        def dfsTraversal(node: DecisionNode, example: pandas.DataFrame, verbose=True):
             try:
                 data = node.data
             except:
@@ -201,8 +201,19 @@ class ID3ClassificationTree(DecisionTree):
                 isNominal = splitValue == None
 
                 if(isNominal):
-                    raise NotImplementedError
-                    # TODO: Implement
+                    for child in node.children:
+                        childAttributeValue = child.data["examples"][attribute].iloc[0]
+                        if (example[attribute] == childAttributeValue):
+                            if (verbose):
+                                print(f"test[\"{attribute}\"] == {childAttributeValue}: True")
+                            return dfsTraversal(child, example)
+                        # In this case, none of them matched.
+                        # TODO: More intelligent logic than picking one at random
+                    leftmostAttributeValue = node.children[0].data["examples"][attribute].iloc[0]
+                    if (verbose):
+                        print(f"test[\"{attribute}\"] didn't match any rules - Using leftmost branching rule")
+                        print(f"\tRule: {attribute} == {leftmostAttributeValue}")
+                    return dfsTraversal(node.children[0], example)
                 else:
                     if(example[attribute] < splitValue):
                         if(verbose):
@@ -291,7 +302,7 @@ class ID3ClassificationTree(DecisionTree):
         else:
             self.tree = bestCandidateTree.tree
             bestAccuracy = self.score(testingSet=self.pruningSet)
-            print(f"Candidate tree accuracy > current accuracy: ({bestAccuracy} > {currAccuracy}). Deciding to prune node {bestNodeId}")
+            print(f"POST-PRUNING: Pruned node {bestNodeId} to construct tree with higher accuracy on pruning set ({bestAccuracy} > {currAccuracy}).")
             print(f"Attempting to improve accuracy further with another iteration of pruning...")
             return self.postPruneTree(d+1)
 
@@ -308,7 +319,8 @@ class ID3ClassificationTree(DecisionTree):
         for x in range(0, len(testingSet)):
             prediction = self.predict(testingSet.iloc[x])
             predictedScores.append(prediction)
-        method = "accuracy"
+
+        method = "cross-entropy"
         accuracy = evaluateError(predictedScores, testingSet[self.yCol], method=method,
                                   classLabel=classLabel)
         return accuracy
@@ -324,15 +336,17 @@ class ID3ClassificationTree(DecisionTree):
         :return: DecisionNode
         '''
 
-        parentNode = node
-        # If the group has entropy lower than the threshold, create a leaf node.
-        currtEntropy = self.computeEntropy([examples])
-        if(currtEntropy <= self.entropyThreshold):
+        def makeLeafNode():
             leafNode = DecisionNode()
             leafNode.children = None
             leafNode.data = {"type": "leaf", "value": scipy.stats.mode(examples[self.yCol])[0][0], "examples": examples}
             leafNode.parent = parentNode
             return leafNode
+        parentNode = node
+        # If the group has entropy lower than the threshold, create a leaf node.
+        currtEntropy = self.computeEntropy([examples])
+        if(currtEntropy <= self.entropyThreshold):
+            return makeLeafNode()
         else:
             maxInformationGainRatio = 0
             bestAttribute = None
@@ -340,15 +354,14 @@ class ID3ClassificationTree(DecisionTree):
 
             attributes = examples.columns.drop(self.yCol)
             for attribute in attributes:
-                if(attribute in self.xargs["NominalValues"]):
+                if(attribute in self.xargs["CategoricalValues"]):
                     uniqueValues = np.unique(examples[attribute])
                     '''Compute Information Gain Ratio of splitting on this categorical attribute'''
                     for uniqueValue in uniqueValues:
                         splits = [examples[examples[attribute] == uniqueValue] for uniqueValue in \
                                   np.unique(examples[attribute])]
-                        totalEntropy = self.computeEntropy(splits)
-
                         '''Compute Information Gain Ratio'''
+                        totalEntropy = self.computeEntropy(splits)
                         informationGain = currtEntropy - totalEntropy
                         intrinsicValue = self.computeIntrinsicValue(examples, attribute)
                         gainRatio = self.computeInfoGainRatio(informationGain, intrinsicValue)
@@ -362,6 +375,8 @@ class ID3ClassificationTree(DecisionTree):
                     # Sort examples by attribute value
                     e = np.unique(examples.sort_values(by=[attribute])[attribute])
                     # Find a set of unique split points to test
+                    if(len(e) == 1):
+                        continue
                     splitPoints = np.unique([(e[i] + e[i+1]) / 2 for i in range(0, len(e)-1)])
                     # Iterate over each possible split
                     for splitPoint in splitPoints:
@@ -369,9 +384,9 @@ class ID3ClassificationTree(DecisionTree):
                         split1 = examples[examples[attribute] <= splitPoint]
                         split2 = examples[examples[attribute] > splitPoint]
                         splits = [split1, split2]
-                        totalEntropy = self.computeEntropy(splits)
 
                         '''Compute Information Gain Ratio'''
+                        totalEntropy = self.computeEntropy(splits)
                         informationGain = currtEntropy - totalEntropy
                         intrinsicValue = -1 * (len(split1)/len(examples)) * np.log2(len(split1) / len(examples)) \
                                          - (len(split2)/len(examples)) * np.log2(len(split2) / len(examples))
@@ -386,11 +401,15 @@ class ID3ClassificationTree(DecisionTree):
             decisionNode.data = {"type": "rule", "splitAttribute": bestAttribute, "splitValue": bestSplitVal, "examples": examples}
             decisionNode.parent = parentNode
 
+            if(bestAttribute == None):
+                return makeLeafNode()
             if(bestSplitVal == None):
                 # Nominal Feature
                 branchValues = np.unique(examples[bestAttribute])
+                if(len(branchValues) == 1 ):
+                    return makeLeafNode()
                 for value in branchValues:
-                    branchExamples = examples[examples[attribute] == value]
+                    branchExamples = examples[examples[bestAttribute] == value]
                     # Now, generate the tree recursively
                     childNode = self.generateTree(branchExamples, decisionNode)
                     # Append new child nodes onto this node
@@ -418,9 +437,8 @@ class ID3ClassificationTree(DecisionTree):
         '''
         # Find the number of total examples
         nExamples = len(examples)
-        branches = None
 
-        uniqueValues = np.unique(examples[attribute])
+        branches = np.unique(examples[attribute])
 
         intrinsicValue = 0
         for value in branches:
@@ -484,13 +502,13 @@ class CARTRegressionTree(DecisionTree):
     def train(  self,
                 trainingSet: pandas.DataFrame, \
                 yCol: str, \
-                xargs: dict={"TuningSet": None, "NominalValues": []}):
+                xargs: dict={"TuningSet": None, "CategoricalValues": []}):
         super().train(trainingSet=trainingSet, yCol=yCol, xargs=xargs)
         self.tuningSet = xargs["TuningSet"]
 
         # Generate the decision tree
         #
-        if(self.xargs["TuningSet"].empty):
+        if(type(self.xargs["TuningSet"]) != pandas.DataFrame):
             self.tree = self.generateTree(trainingSet, None)
         else:
             print("Tuning MSE Threshold for CART Regression Tree..")
@@ -500,12 +518,12 @@ class CARTRegressionTree(DecisionTree):
             # Compute average difference of points
             dataRange = trainingSet[self.yCol].max() -  trainingSet[self.yCol].min()
             avgDiff = dataRange / len(trainingSet[self.yCol])
-            min = 1
-            max = 3
+            min = 50
+            max = 51
 
             t2 = copy.deepcopy(self) # Used only for scoring
 
-            for mseThreshold in np.arange(min, max):
+            for mseThreshold in np.arange(min, max)*avgDiff:
                 print(f"Building CART Regression Tree with MSE Threshold={mseThreshold}")
                 self.mseThreshold = mseThreshold
                 candidateTree = self.generateTree(trainingSet, None)
@@ -531,7 +549,7 @@ class CARTRegressionTree(DecisionTree):
         :param example: Example to predict.
         :return: data frame of predictions
         '''
-        def dfsTraversal(node: DecisionNode, example: pandas.DataFrame, verbose=False):
+        def dfsTraversal(node: DecisionNode, example: pandas.DataFrame, verbose=True):
             try:
                 data = node.data
             except:
@@ -544,8 +562,19 @@ class CARTRegressionTree(DecisionTree):
                 isNominal = splitValue == None
 
                 if(isNominal):
-                    raise NotImplementedError
-                    # TODO: Implement
+                    for child in node.children:
+                        childAttributeValue = child.data["examples"][attribute].iloc[0]
+                        if(example[attribute] == childAttributeValue):
+                            if (verbose):
+                                print(f"test[\"{attribute}\"] == {childAttributeValue}: True")
+                            return dfsTraversal(child, example)
+                        # In this case, none of them matched.
+                        # TODO: More intelligent logic than picking one at random
+                    leftmostAttributeValue = node.children[0].data["examples"][attribute].iloc[0]
+                    if (verbose):
+                        print(f"test[\"{attribute}\"] didn't match any rules - Using leftmost branching rule")
+                        print(f"\tRule: {attribute} == {leftmostAttributeValue}")
+                    return dfsTraversal(node.children[0], example)
                 else:
                     if(example[attribute] < splitValue):
                         if(verbose):
@@ -580,6 +609,7 @@ class CARTRegressionTree(DecisionTree):
         for x in range(0, len(testingSet)):
             prediction = self.predict(testingSet.iloc[x])
             predictedScores.append(prediction)
+            print(f"Actual Value= {testingSet[self.yCol].iloc[x]}, Predicted Score= {prediction}")
         method = "MSE"
         mse = evaluateError(predictedScores, testingSet[self.yCol], method=method)
         return mse
@@ -594,25 +624,28 @@ class CARTRegressionTree(DecisionTree):
         :param node: Parent Node, which this tree will append children to.
         :return: DecisionNode
         '''
-
-        parentNode = node
-        # If the group has MSE lower than the MSE threshold, create a leaf node.
-        currtMSE = self.computeMSE([examples])
-        if(currtMSE <= self.mseThreshold):
+        def makeLeafNode():
             leafNode = DecisionNode()
             leafNode.children = None
             leafNode.data = {"type": "leaf", "value": np.mean(examples[self.yCol]), "examples": examples}
             leafNode.parent = parentNode
             return leafNode
+
+        parentNode = node
+        # If the group has MSE lower than the MSE threshold, create a leaf node.
+        currtMSE = self.computeMSE([examples])
+        if(currtMSE <= self.mseThreshold):
+            print(f"EARLY STOPPING: MSE of these {len(examples)} examples (MSE={currtMSE}) is less than MSE Threshold ({self.mseThreshold})")
+            print(f"Making Leaf Node with value={np.mean(examples[self.yCol])}")
+            return makeLeafNode()
         else:
-            maxMSEReduction = 0
+            maxMSEReduction = -1
             bestAttribute = None
             bestSplitVal = None
 
             attributes = examples.columns.drop(self.yCol)
             for attribute in attributes:
-                if(attribute in self.xargs["NominalValues"]):
-                    uniqueValues = np.unique(examples[attribute])
+                if(attribute in self.xargs["CategoricalValues"]):
                     '''Compute Information Gain Ratio of splitting on this categorical attribute'''
                     splits = [examples[examples[attribute] == uniqueValue] for uniqueValue in \
                               np.unique(examples[attribute])]
@@ -655,6 +688,8 @@ class CARTRegressionTree(DecisionTree):
             if(bestSplitVal == None):
                 # Nominal Feature
                 branchValues = np.unique(examples[bestAttribute])
+                if(len(branchValues) == 1):
+                    return makeLeafNode()
                 for value in branchValues:
                     branchExamples = examples[examples[bestAttribute] == value]
                     # Now, generate the tree recursively

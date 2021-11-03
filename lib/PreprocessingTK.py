@@ -93,6 +93,7 @@ def convertOrdinal(dataFrame, columnId, ordinalValueDict, inplace=False):
     # Encode ordinal values as integers
     for ordinal, integer in ordinalValueDict.items():
         data[columnId].replace(ordinal, integer, inplace=True)
+    data[columnId] = data[columnId].astype('int32')
 
     if(not inplace):
         return data
@@ -381,6 +382,15 @@ def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
         acc = num / den
         return acc
 
+    def cross_entropy(predictedValues, expectedValues):
+        cross_ent = 0
+        classes = list(set(predictedValues + expectedValues))
+        for c in classes:
+            prob_c_predicted = predictedValues.count(c)
+            prob_c_expected = expectedValues.count(c)
+            cross_ent = cross_ent - (prob_c_expected * np.log2(prob_c_predicted))
+        return cross_ent
+
     methods = { "accuracy" : accuracy,
                 "precision": precision,
                 "recall": recall,
@@ -389,6 +399,7 @@ def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
                 "R2": R2,
                 "pearson": pearsonCorr,
                 "f1": f1,
+                "cross-entropy": cross_entropy
                 }
 
     assert(isinstance(predictedValues, validListTypes))

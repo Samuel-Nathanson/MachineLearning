@@ -1,17 +1,5 @@
-'''
-– Provide sample outputs from one test set on one fold for a classification tree and a regression tree.
-– Show a sample classification tree without pruning and with pruning.
-– Show a sample regression tree without early stopping and with early stopping.
-– Demonstrate the calculation of information gain, gain ratio, and mean squared error.
-– Demonstrate a decision being made to prune a subtree (pruning) and a decision being made to stop growing a subtree (early stopping).
-– Demonstrate an example traversing a classification tree and a class label being assigned at the leaf.
-– Demonstrate an example traversing a regression tree and a prediction being made at the leaf.
-'''
-
 import numpy as np
 import pandas
-import time
-import sys
 
 # Classification
 from examples.BreastCancer.BreastCancer import preprocessBreastCancer
@@ -22,9 +10,14 @@ from examples.ForestFires.ForestFires import preprocessForestFires
 from examples.Abalone.Abalone import preprocessAbalone
 from examples.Machine.Machine import preprocessMachine
 
-from lib.DecisionTree import ID3ClassificationTree, CARTRegressionTree
+from lib.AutoencoderNeuralNetwork import AutoencoderNeuralNetwork
+from lib.NeuralNetwork import NeuralNetwork
+from lib.SimpleLinearNetwork import SimpleLinearNetwork
+from lib.LogisticClassifier import LogisticClassifier
 
 if __name__ == "__main__":
+
+    numFolds = 5
 
     # Classification
     doBreastCancer = True
@@ -35,6 +28,15 @@ if __name__ == "__main__":
     doForestFires = False
     doMachine = False
     doAbalone = False
+
+    # Additional Options
+    doLinearPrediction = True
+    doNeuralNetwork = False
+    doAutoencoderNetwork = False
+
+    if([doLinearPrediction, doNeuralNetwork, doAutoencoderNetwork].count(True) != 1):
+        print("Please select a single algorithm to run: Linear Prediction, Neural Network, or Autoencoder Network")
+        exit(299)
 
     '''
     Create a dictionary to store parameters for each experiment
@@ -111,13 +113,6 @@ if __name__ == "__main__":
         }
     }
 
-    '''
-    Set shared values for all experiments
-    '''
-    numFolds = 6
-    doPostPruning = True
-    doThresholdTuning = True
-
     ''' 
     Iterate through each experiment to either skip or run
     '''
@@ -127,7 +122,6 @@ if __name__ == "__main__":
             # Skip experiment
             print(f"Skipping experiment: {experiment['experimentName']}")
             continue
-            print("====****====****====****====****====****====****====\n\n")
         else:
             # Run experiment
             print(f"Running experiment: {experiment['experimentName']}")
@@ -135,57 +129,81 @@ if __name__ == "__main__":
             folds = experiment["preprocessFunc"](numFolds)
             print(f"Separated data into {len(folds)} folds, sizes {[x.shape for x in folds]}")
 
+        # Classification
         if(experiment["task"] == "classification"):
-            foldAccuracies = []
+            foldScores = []
             for i in range(0, len(folds)-1):
-                # Pop Tuning and Pruning set from the folds
-                pruningSet = folds.pop(i)  # Pruning Set, unused for experiments without pruning
-                testingSet = folds.pop(i)  # Testing Set
-                trainingSet = pandas.concat(folds, ignore_index=True)
-                folds.insert(i, testingSet)
-                folds.insert(i, pruningSet)
-                xargs = {
-                    "PruningSet": pruningSet if doPostPruning else None,
-                    "CategoricalValues": experiment["categoricalValues"]
-                }
-                clf = ID3ClassificationTree()
-                clf.train(trainingSet=trainingSet, yCol=experiment["yCol"], xargs=xargs)
-
-                print(f"ID3 Decision Tree constructed {'and pruned' if doPostPruning else ''}")
-                testingAccuracy = clf.score(testingSet)
-                print(f"Fold {i-1} : ID3 Decision Tree accuracy on testing set = {testingAccuracy}")
-
-                foldAccuracies.append(testingAccuracy)
-            meanfoldScore = np.mean(foldAccuracies)
-            print(f"Fold Mean Score: {meanfoldScore}")
-
-
-        elif(experiment["task"] == "regression"):
-            foldMSEs = []
-            for i in range(0, len(folds)-1):
-                # Pop Tuning and Pruning set from the folds
+                # Pop Tuning set from the folds
                 tuningSet = folds.pop(i)  # Pruning Set, unused for experiments without pruning
                 testingSet = folds.pop(i)  # Testing Set
                 trainingSet = pandas.concat(folds, ignore_index=True)
                 folds.insert(i, testingSet)
                 folds.insert(i, tuningSet)
 
-                predicted_scores = []
+                xargs = {}
 
-                xargs = {
-                    "TuningSet": tuningSet if doThresholdTuning else None,
-                    "CategoricalValues": experiment["categoricalValues"]
-                }
-                clf = CARTRegressionTree()
-                clf.train(trainingSet=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                clf = None
+                name = ""
+                score_name = "cross-entropy"
+                if(doLinearPrediction):
+                    clf = LogisticClassifier()
+                    name = "Logistic Regression"
+                elif(doNeuralNetwork):
+                    clf = NeuralNetwork()
+                    name = "Neural Network"
+                elif(doAutoencoderNetwork):
+                    clf = AutoencoderNeuralNetwork()
+                    name = "Autoencoder Network"
+                else:
+                    exit(285)
 
-                print(f"CART Decision Tree constructed {'and tuned' if doThresholdTuning else ''}")
-                testingMSE = clf.score(testingSet)
-                print(f"Fold {i-1} : CART Decision Tree MSE on testing set = {testingMSE}")
+                print(f"Training {name}")
+                clf.train(trainData=trainingSet, yCol=experiment["yCol"])
+                foldScore = clf.score(testingSet)
+                print(f"Fold {i-1} : {score_name} on testing set = {foldScore}")
 
-                foldMSEs.append(testingMSE)
-            meanfoldScore = np.mean(foldMSEs)
-            print(f"Fold Mean Score : {meanfoldScore}")
+                foldScores.append(foldScore)
+
+            meanfoldScore = np.mean(foldScores)
+            print(f"Fold Mean Score: {meanfoldScore}")
+
+        # Regression
+        elif(experiment["task"] == "regression"):
+            foldMSEs = []
+            for i in range(0, len(folds)-1):
+                # Pop Tuning set from the folds
+                tuningSet = folds.pop(i)  # Pruning Set, unused for experiments without pruning
+                testingSet = folds.pop(i)  # Testing Set
+                trainingSet = pandas.concat(folds, ignore_index=True)
+                folds.insert(i, testingSet)
+                folds.insert(i, tuningSet)
+
+                xargs = {}
+
+                clf = None
+                name = ""
+                score_name = "MSE"
+                if(doLinearPrediction):
+                    clf = SimpleLinearNetwork()
+                    name = "Simple Linear Network"
+                elif(doNeuralNetwork):
+                    clf = NeuralNetwork()
+                    name = "Neural Network"
+                elif(doAutoencoderNetwork):
+                    clf = AutoencoderNeuralNetwork()
+                    name = "Autoencoder Network"
+                else:
+                    exit(285)
+
+                print(f"Training {name}")
+                clf.train(trainData=trainingSet, yCol=experiment["yCol"])
+                foldScore = clf.score(testingSet)
+                print(f"Fold {i-1} : {score_name} on testing set = {foldScore}")
+
+                foldScores.append(foldScore)
+
+            meanfoldScore = np.mean(foldScores)
+            print(f"Fold Mean Score: {meanfoldScore}")
 
 
 
