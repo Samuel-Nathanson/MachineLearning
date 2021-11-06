@@ -384,11 +384,21 @@ def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
 
     def cross_entropy(predictedValues, expectedValues):
         cross_ent = 0
-        classes = list(set(predictedValues + expectedValues))
-        for c in classes:
-            prob_c_predicted = predictedValues.count(c)
-            prob_c_expected = expectedValues.count(c)
-            cross_ent = cross_ent - (prob_c_expected * np.log2(prob_c_predicted))
+
+        import random
+
+        # Assumes that predictedValues is a list of one-hot coded values (in list form)
+        # e.g.
+        # expectedValues[0] = [0,  0, 0, 0,  1]
+        # actualValues[0]   = [.1,.1,.1,.1, .6]
+        for y, r in list(zip(predictedValues, expectedValues)):
+            # y_i is the probability of ground-truth class i (1 or 0)
+            # r_i is the predicted probability from the logistic regression
+            for y_i, r_i in list(zip(y, r)):
+                # Cross entropy rewards correct classes only
+                cross_ent += r_i * np.log2(y_i+1e-6)
+
+        cross_ent = -1 * cross_ent
         return cross_ent
 
     methods = { "accuracy" : accuracy,

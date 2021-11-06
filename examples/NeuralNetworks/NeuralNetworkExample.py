@@ -20,13 +20,13 @@ if __name__ == "__main__":
     numFolds = 5
 
     # Classification
-    doBreastCancer = True
+    doBreastCancer = False
     doCarEvaluations = False
     do1984VotingRecords = False
 
     # Regression
-    doForestFires = False
-    doMachine = False
+    doForestFires = True
+    doMachine = True
     doAbalone = False
 
     # Additional Options
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             "experimentName":"Breast Cancer Diagnosis Prediction",
             "preprocessFunc":preprocessBreastCancer,
             "runExperiment": doBreastCancer,
-            "categoricalValues": []
+            "categoricalValues": [],
         },
         "carEvaluations": {
             "yCol": "Evaluation",
@@ -127,6 +127,16 @@ if __name__ == "__main__":
             print(f"Running experiment: {experiment['experimentName']}")
             # Preprocess Data into folds
             folds = experiment["preprocessFunc"](numFolds)
+
+            # Standardize!
+            from pandas.api.types import is_numeric_dtype
+            from lib.PreprocessingTK import standardize
+            for column_name in folds[0].drop(columns=experiment['yCol']).columns:
+                if(is_numeric_dtype(folds[0][column_name])):
+                    for i in range(1, len(folds)):
+                        tmp, folds[i] = standardize(folds[0], folds[i], column_name, inplace=False)
+                    folds[0], tmp = standardize(folds[0], folds[0], column_name, inplace=False)
+
             print(f"Separated data into {len(folds)} folds, sizes {[x.shape for x in folds]}")
 
         # Classification
@@ -134,7 +144,7 @@ if __name__ == "__main__":
             foldScores = []
             for i in range(0, len(folds)-1):
                 # Pop Tuning set from the folds
-                tuningSet = folds.pop(i)  # Pruning Set, unused for experiments without pruning
+                tuningSet = folds.pop(i)  # Tuning Set
                 testingSet = folds.pop(i)  # Testing Set
                 trainingSet = pandas.concat(folds, ignore_index=True)
                 folds.insert(i, testingSet)
@@ -144,9 +154,15 @@ if __name__ == "__main__":
 
                 clf = None
                 name = ""
+                xargs = {}
                 score_name = "cross-entropy"
                 if(doLinearPrediction):
                     clf = LogisticClassifier()
+                    xargs = {
+                        "learning_rate": 0.0001,
+                        "stochastic_gradient_descent": False,  # Stochastic G.D. does not appear to converge.
+                        "convergence_threshold": 0.01
+                    }
                     name = "Logistic Regression"
                 elif(doNeuralNetwork):
                     clf = NeuralNetwork()
@@ -158,9 +174,9 @@ if __name__ == "__main__":
                     exit(285)
 
                 print(f"Training {name}")
-                clf.train(trainData=trainingSet, yCol=experiment["yCol"])
+                clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
                 foldScore = clf.score(testingSet)
-                print(f"Fold {i-1} : {score_name} on testing set = {foldScore}")
+                print(f"Fold {i} : {score_name} on testing set = {foldScore}")
 
                 foldScores.append(foldScore)
 
@@ -186,6 +202,11 @@ if __name__ == "__main__":
                 if(doLinearPrediction):
                     clf = SimpleLinearNetwork()
                     name = "Simple Linear Network"
+                    xargs = {
+                        "learning_rate": 0.001,
+                        "stochastic_gradient_descent": False,  # Stochastic G.D. does not appear to converge.
+                        "convergence_threshold": 0.01
+                    }
                 elif(doNeuralNetwork):
                     clf = NeuralNetwork()
                     name = "Neural Network"
@@ -196,13 +217,13 @@ if __name__ == "__main__":
                     exit(285)
 
                 print(f"Training {name}")
-                clf.train(trainData=trainingSet, yCol=experiment["yCol"])
+                clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
                 foldScore = clf.score(testingSet)
-                print(f"Fold {i-1} : {score_name} on testing set = {foldScore}")
+                print(f"Fold {i} : {score_name} on testing set = {foldScore}")
 
-                foldScores.append(foldScore)
+                foldMSEs.append(foldScore)
 
-            meanfoldScore = np.mean(foldScores)
+            meanfoldScore = np.mean(foldMSEs)
             print(f"Fold Mean Score: {meanfoldScore}")
 
 
