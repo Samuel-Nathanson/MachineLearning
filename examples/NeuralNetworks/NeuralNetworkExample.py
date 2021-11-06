@@ -30,8 +30,8 @@ if __name__ == "__main__":
     doAbalone = False
 
     # Additional Options
-    doLinearPrediction = True
-    doNeuralNetwork = False
+    doLinearPrediction = False
+    doNeuralNetwork = True
     doAutoencoderNetwork = False
 
     if([doLinearPrediction, doNeuralNetwork, doAutoencoderNetwork].count(True) != 1):
@@ -164,9 +164,16 @@ if __name__ == "__main__":
                         "convergence_threshold": 0.01
                     }
                     name = "Logistic Regression"
-                elif(doNeuralNetwork):
+                elif (doNeuralNetwork):
                     clf = NeuralNetwork()
                     name = "Neural Network"
+                    xargs = {
+                        "learning_rate": 0.001,
+                        "minibatch_learning": True,
+                        "convergence_threshold": 0.01,
+                        "hidden_layer_dims": [8, 8],
+                        "activation_function": "sigmoid",
+                    }
                 elif(doAutoencoderNetwork):
                     clf = AutoencoderNeuralNetwork()
                     name = "Autoencoder Network"
@@ -210,6 +217,11 @@ if __name__ == "__main__":
                 elif(doNeuralNetwork):
                     clf = NeuralNetwork()
                     name = "Neural Network"
+                    xargs = {
+                        "learning_rate": 0.001,
+                        "minibatch_learning": True,
+                        "convergence_threshold": 0.01,
+                    }
                 elif(doAutoencoderNetwork):
                     clf = AutoencoderNeuralNetwork()
                     name = "Autoencoder Network"

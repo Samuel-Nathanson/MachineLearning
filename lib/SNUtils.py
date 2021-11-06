@@ -1,5 +1,5 @@
 from pandas import Series
-from numpy import ndarray, sqrt
+from numpy import ndarray, sqrt, zeros, random
 
 validListTypes = (Series, list, ndarray)
 
@@ -41,3 +41,7 @@ def distanceEuclideanL2(vec1: validListTypes, vec2: validListTypes):
         else:
             squaredTotal += pow(float(vec1[i]) - float(vec2[i]), 2)
     return sqrt(squaredTotal)
+
+
+def zero_ish(shape):
+    return 0.02* random.rand(*shape) - 1
