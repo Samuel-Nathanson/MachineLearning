@@ -10,7 +10,6 @@ from examples.ForestFires.ForestFires import preprocessForestFires
 from examples.Abalone.Abalone import preprocessAbalone
 from examples.Machine.Machine import preprocessMachine
 
-from lib.AutoencoderNeuralNetwork import AutoencoderNeuralNetwork
 from lib.NeuralNetwork import NeuralNetwork
 from lib.SimpleLinearNetwork import SimpleLinearNetwork
 from lib.LogisticClassifier import LogisticClassifier
@@ -20,19 +19,19 @@ if __name__ == "__main__":
     numFolds = 5
 
     # Classification
-    doBreastCancer = False
+    doBreastCancer = True
     doCarEvaluations = False
     do1984VotingRecords = False
 
     # Regression
-    doForestFires = True
-    doMachine = True
+    doForestFires = False
+    doMachine = False
     doAbalone = False
 
     # Additional Options
     doLinearPrediction = False
-    doNeuralNetwork = True
-    doAutoencoderNetwork = False
+    doNeuralNetwork = False
+    doAutoencoderNetwork = True
 
     if([doLinearPrediction, doNeuralNetwork, doAutoencoderNetwork].count(True) != 1):
         print("Please select a single algorithm to run: Linear Prediction, Neural Network, or Autoencoder Network")
@@ -159,29 +158,40 @@ if __name__ == "__main__":
                 if(doLinearPrediction):
                     clf = LogisticClassifier()
                     xargs = {
-                        "learning_rate": 0.0001,
+                        "learning_rate": 0.01,
                         "stochastic_gradient_descent": False,  # Stochastic G.D. does not appear to converge.
-                        "convergence_threshold": 0.01
+                        "convergence_threshold": 1
                     }
                     name = "Logistic Regression"
                 elif (doNeuralNetwork):
                     clf = NeuralNetwork()
                     name = "Neural Network"
                     xargs = {
-                        "learning_rate": 0.001,
+                        "learning_rate": 0.01,
                         "minibatch_learning": True,
                         "convergence_threshold": 0.01,
                         "hidden_layer_dims": [8, 8],
-                        "activation_function": "sigmoid",
                     }
                 elif(doAutoencoderNetwork):
-                    clf = AutoencoderNeuralNetwork()
-                    name = "Autoencoder Network"
+                    clf = NeuralNetwork()
+                    name = "Autoencoder Neural Network"
+                    xargs = {
+                        "learning_rate": 0.001,
+                        "minibatch_learning": True,
+                        "convergence_threshold": 0.01,
+                        "hidden_layer_dims": [len(trainingSet.columns ) - 3],
+                    }
                 else:
                     exit(285)
 
                 print(f"Training {name}")
-                clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                if(doAutoencoderNetwork):
+                    clf.train_autoencoder(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                else:
+                    clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+
+
+
                 foldScore = clf.score(testingSet)
                 print(f"Fold {i} : {score_name} on testing set = {foldScore}")
 

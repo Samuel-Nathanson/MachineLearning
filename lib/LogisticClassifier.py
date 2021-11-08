@@ -46,7 +46,7 @@ class LogisticClassifier:
         self.unique_vals = np.unique(trainData[yCol])
         self.one_hot_code = lambda x: vectorized_one_hot_coder(x, self.unique_vals)
         self.num_outputs = len(np.unique(trainData[yCol]))
-        self.num_inputs = len(trainData.drop(columns=[yCol]).columns)
+        self.num_inputs = len(trainData.drop(columns=[yCol]).columns) + 1 # add 1 for bias unit
         self.xargs = xargs
         self.learning_rate = self.xargs["learning_rate"] if ("learning_rate" in xargs.keys()) else 0.001
         self.stochastic_gradient_descent = self.xargs["stochastic_gradient_descent"] if ("stochastic_gradient_descent" in self.xargs.keys()) else False
@@ -83,6 +83,8 @@ class LogisticClassifier:
                 for exampleIter in iter:
                     example = exampleIter[1]
                     actual_value = self.one_hot_code(example[yCol])
+                    # Append bias unit and convert to list
+                    example = list(pandas.concat([pandas.Series([1]), example]))
                     # This will become a valid probability distribution after applying the softmax func.
                     class_probabilities = [0] * self.num_outputs
                     for i in range(0, len(class_probabilities)):
@@ -130,6 +132,7 @@ class LogisticClassifier:
         '''
         Predict a class label using the logistic classifier
         '''
+        example = list(pandas.concat([pandas.Series([1]), example]))
         class_probabilities = [0] * self.num_outputs
         for i in range(0, len(class_probabilities)):
             # Sum the current predicted weighted values

@@ -58,7 +58,7 @@ chooseBestK: Tuning Function to find the best K
 def chooseBestK(validationSet: pandas.DataFrame, className: str=None, doClassification=True, classPredictionValue: str=None, maxK: int=7):
     print("Tuning K hyperparameter...")
     numFolds = 5
-    validationFolds = partition(validationSet, numFolds, classificationColumnId=className)
+    validationFolds = partition(validationSet, numFolds, classificationColumnId=className if doClassification else None)
     errorMethod = "accuracy" if doClassification else "MSE"
     doRegression = not doClassification
 

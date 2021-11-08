@@ -1,5 +1,5 @@
 from pandas import Series
-from numpy import ndarray, sqrt, zeros, random
+from numpy import ndarray, sqrt, zeros, random, exp
 
 validListTypes = (Series, list, ndarray)
 
@@ -43,5 +43,38 @@ def distanceEuclideanL2(vec1: validListTypes, vec2: validListTypes):
     return sqrt(squaredTotal)
 
 
-def zero_ish(shape):
-    return 0.02* random.rand(*shape) - 1
+def zero_ish(shape: list=[]):
+    '''
+    Compute random np.array with weights between -0.1 and 0.1
+    :param shape: list
+    :return: multi-dimensional array of shape : shape
+    '''
+    return 0.02* (random.rand(*shape) - 0.5)
+
+
+def sigmoid(x):
+    '''
+    Sigmoid basis function
+    :param x: scalar value
+    :return: sigmoid computation of scalar value
+    '''
+    return 1 / ( 1 + exp(-1*x))
+
+def softmax(arr: list):
+    '''
+    Softmax to treat all classes uniformly
+    :param arr:
+    :return:
+    '''
+    exp_sum = sum([exp(x) for x in arr])
+    return [exp(x) / exp_sum for x in arr]
+
+def sigmoid_derivative(x):
+    '''
+    Sigmoid Derivattive
+    Proof can be found in this answer:
+    https://math.stackexchange.com/questions/78575/derivative-of-sigmoid-function-sigma-x-frac11e-x
+    :param x: value
+    :return: derivative of sigmoid function at value x
+    '''
+    return sigmoid(x)*(1-sigmoid(x))
