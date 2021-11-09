@@ -3,6 +3,8 @@ from lib.PreprocessingTK import *
 import pandas
 import numpy as np
 from lib.KNN import *
+import os
+
 '''
 preprocessVotingRecords: Preprocesses the voting records dataset and returns N folds
 This process..
@@ -50,9 +52,11 @@ def preprocessVotingRecords(numFolds):
         "duty-free-exports",
         "export-administration-act-south-africa"
     ]
-    data = pandas.read_csv("../../data/VotingRecords/house-votes-84.data",
-                           names=featureNames)
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/VotingRecords/house-votes-84.data")
+    data = pandas.read_csv(file_path, names=featureNames)
+
     # Partition data into folds
+
     classColName = "affiliation"
     folds = partition(data, numFolds, classificationColumnId=classColName)
 

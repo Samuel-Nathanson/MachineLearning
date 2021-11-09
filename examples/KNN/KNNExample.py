@@ -46,6 +46,7 @@ def runKNNExperiment(folds, yColumnId, doRegression=True, classPredictionValue=N
         t0 = time.time()
         if(doRegression):
             epsilon, mse, condensed = chooseBestEpsilon(validationSet, pandas.concat(folds, ignore_index=True), yColumnId, condensedAlgorithm=doCondensedAlgorithm)
+            print("\n")
             print(f"Chose Epsilon Value of {epsilon} in {time.time() - t0} seconds")
         if (doCondensedAlgorithm):
             t0 = time.time()
@@ -53,6 +54,8 @@ def runKNNExperiment(folds, yColumnId, doRegression=True, classPredictionValue=N
             for i in range(0, len(folds)):
                 folds[i] = kNNCondenseTrainingSet(folds[i], yColumnId, doClassification, epsilon)
                 sys.stdout.write(f'fold={i}/{numFolds - 1}, elapsed={(time.time() - t0)}')
+                sys.stdout.flush()
+            print(f"\nCondensed Training Set in {time.time() - t0} seconds")
 
         if (doEditedAlgorithm):
             print("Editing training set...")
@@ -93,17 +96,17 @@ if __name__ == "__main__":
     k=3
 
     # Classification
-    doBreastCancer = False
+    doBreastCancer = True
     doCarEvaluations = True
     do1984VotingRecords = True
 
     # Regression
     doForestFires = True
     doMachine = True
-    doAbalone = True
+    doAbalone = False
 
     # Other Algorithms
-    doCondensedAlgorithm = False
+    doCondensedAlgorithm = True
     doEditedAlgorithm = False
 
     # Options

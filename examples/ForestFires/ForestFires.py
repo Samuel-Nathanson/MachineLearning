@@ -2,6 +2,7 @@
 from lib.PreprocessingTK import *
 import pandas
 import numpy as np
+import os
 
 '''
 preprocessForestFires: Preprocesses the forest fires dataset and returns N folds
@@ -47,9 +48,9 @@ def preprocessForestFires(numFolds = 5):
         "Area"
     ]
 
-    data = pandas.read_csv("../../data/ForestFires/forestfires.data",
-                           names=featureNames,
-                           skiprows=[0])
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/ForestFires/forestfires.data")
+    data = pandas.read_csv(file_path, names=featureNames, skiprows=[0])
+
 
     # Convert nominal data to categorical using one-hot encoding
     nominalFeatures = ["Day", "Month"]

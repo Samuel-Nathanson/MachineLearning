@@ -2,6 +2,7 @@
 from lib.PreprocessingTK import *
 import pandas
 import numpy as np
+import os
 
 '''
 preprocessCars: Preprocesses the cars dataset and returns N folds
@@ -23,8 +24,9 @@ def preprocessCars(numFolds: int=5):
        Evaluation   unacc, acc, good, vgood
     '''
     featureNames=["Buying", "Maint", "Doors", "Persons", "Lug Boot", "Safety", "Evaluation"]
-    data = pandas.read_csv("../../data/Cars/car.data",
-                      names=featureNames)
+
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/Cars/car.data")
+    data = pandas.read_csv(file_path, names=featureNames)
     # Show original data frame
 
     # Convert ordinal data to integer

@@ -2,6 +2,7 @@
 from lib.PreprocessingTK import *
 import pandas
 import numpy as np
+import os
 
 '''
 preprocessMachine: Preprocesses the machine dataset and returns N folds
@@ -43,8 +44,8 @@ def preprocessMachine(numFolds=5):
         "ERP"
     ]
 
-    data = pandas.read_csv("../../data/Machine/machine.data",
-                           names=featureNames)
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/Machine/machine.data")
+    data = pandas.read_csv(file_path, names=featureNames)
 
     dropColumns = ["ModelName", "VendorName"]
 

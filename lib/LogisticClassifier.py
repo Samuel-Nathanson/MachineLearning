@@ -27,14 +27,14 @@ class LogisticClassifier:
         '''
         String conversion
         '''
-        print(self.weights)
+        return self.weights
 
 
     def __repr__(self):
         '''
         String conversion for print
         '''
-        print(self.__str__())
+        return self.__str__()
 
 
     def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
@@ -70,13 +70,12 @@ class LogisticClassifier:
 
         epoch_num = 0
         weights_delta = np.zeros(self.weights.shape)
-
+        import time
         while(True): # loop until convergence
             epoch_num +=1
 
             with alive_bar(len(trainData),
-                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}",
-                           bar="notes") as bar:
+                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()
@@ -84,7 +83,7 @@ class LogisticClassifier:
                     example = exampleIter[1]
                     actual_value = self.one_hot_code(example[yCol])
                     # Append bias unit and convert to list
-                    example = list(pandas.concat([pandas.Series([1]), example]))
+                    example = list(pandas.concat([pandas.Series([1]), example.drop(labels=yCol)]))
                     # This will become a valid probability distribution after applying the softmax func.
                     class_probabilities = [0] * self.num_outputs
                     for i in range(0, len(class_probabilities)):
@@ -101,10 +100,11 @@ class LogisticClassifier:
                     for i in range(0, self.num_outputs):
                         for j in range(0, self.num_inputs):
                             weights_delta[j][i] += (actual_value[i] - class_probabilities[i]) * example[j]
+
                     if(self.stochastic_gradient_descent):
                         self.weights += self.learning_rate * weights_delta
+                    time.sleep(0.001)
                     bar()
-
             if(not self.stochastic_gradient_descent):
                 self.weights += (self.learning_rate * weights_delta) / len(trainData)
             # Batch Update

@@ -1,6 +1,7 @@
 # Import Libraries
 from lib.PreprocessingTK import *
 import pandas
+import os
 import numpy as np
 
 '''
@@ -34,8 +35,8 @@ def preprocessBreastCancer(numFolds: int=5):
                   "maginalAdhesion", "epithelialCellSize", "bareNuclei", "blandChromatin",
                   "normalNucleoli", "mitoses", "class"]
 
-    data = pandas.read_csv("../../data/BreastCancer/breast-cancer-wisconsin.data",
-                           names=featureNames)
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/BreastCancer/breast-cancer-wisconsin.data")
+    data = pandas.read_csv(file_path, names=featureNames)
 
     # Delete ID Column
     data.drop("id", axis=1, inplace=True)

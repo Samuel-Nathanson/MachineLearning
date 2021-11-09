@@ -79,33 +79,41 @@ class NeuralNetwork:
         '''
         autoencoder_train_data = copy.deepcopy(trainData)
         autoencoder_train_data.drop(columns=[yCol], inplace=True)
-        self.yCol = "AUTOENCODER_REPLICATED_INPUTS"
         new_xargs = copy.deepcopy(xargs)
         new_xargs["task"] = "autoencode"
-        autoencoder_train_data[self.yCol] = trainData.values.tolist()
 
+        # Train autoencoder with output layer set to replicated inputs
+        self.yCol = "AUTOENCODER_REPLICATED_INPUTS"
+        autoencoder_train_data[self.yCol] = autoencoder_train_data.values.tolist()
         self.train(autoencoder_train_data, self.yCol, xargs=new_xargs)
 
-        def remove_output_layer():
-            self.layers.pop(-1)
-            self.num_outputs = self.layers.shape[1]
-            self.errors.pop(-1)
+        # Reset some indices
+        self.yCol = yCol
+        self.task = xargs["task"] if "task" in xargs else ""
 
-        remove_output_layer()
+        if(self.task == "classification"):
+            self.unique_vals = np.unique(trainData[yCol])
+            vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
+            self.one_hot_code = lambda x: vectorized_one_hot_coder(x, self.unique_vals)
+
+        # Remove Replicated Output Layer
+        self.layers.pop(-1)
+        self.num_outputs = self.layers[-1].shape[1]
+        self.errors.pop(-1)
 
         # insert two new layers
+        # Reset y column
+        self.yCol = yCol
         first_hidden_layer_size = self.hidden_layer_dims[-1]
         new_hidden_layer_size = first_hidden_layer_size
         new_output_layer_size = len(np.unique(trainData[yCol])) if self.task == "classification" else 1
-
         new_hidden_layer = zero_ish([first_hidden_layer_size, new_hidden_layer_size])
         new_output_layer = zero_ish([new_hidden_layer_size, new_output_layer_size])
         new_output_error = np.zeros(new_output_layer_size)
         new_hidden_error = np.zeros(new_hidden_layer_size)
-
         self.layers.append(new_hidden_layer)
         self.layers.append(new_output_layer)
-
+        self.layer_inputs.append(np.zeros(new_hidden_layer_size))
         self.errors.append(new_hidden_error)
         self.errors.append(new_output_error)
 
@@ -133,7 +141,17 @@ class NeuralNetwork:
                 xt = trainData.iloc[t]
                 predicted_value = self.predict(xt)
                 actual_value = None
-                actual_value = self.one_hot_code(xt[yCol]) if self.task == "classification" else xt[yCol]
+
+                # use correct data type
+                if(self.task == "classification"):
+                    actual_value = self.one_hot_code(xt[yCol])
+                elif(self.task == "regression"):
+                    actual_value = [xt[yCol]]
+                elif(self.task == "autoencode"):
+                    actual_value = xt[yCol]
+                else:
+                    exit(286)
+
                 # Append bias unit and convert to list
                 xt = list(pandas.concat([pandas.Series([1]), xt]))
 
@@ -189,7 +207,7 @@ class NeuralNetwork:
                                 layer_delta[j][i] = backpropagated_error * input_scalar
                             else:
                                 layer_delta[j][i] = backpropagated_error * sigmoid_derivative(input_scalar) * input_scalar
-
+                    # nn_abalone, linear voting_records, linear forest fires
                     weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
 
             '''

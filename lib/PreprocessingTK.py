@@ -110,22 +110,33 @@ def convertNominal(dataFrame, columnId, nominalValueList, inplace=False):
     assert(isinstance(nominalValueList, validListTypes))
     assert(keyExists(data, columnId))
 
-    oneHotWidth = len(nominalValueList)
-    oneHotFormat = "#0" + str(oneHotWidth+2) + "b"
+    unique_vals = np.unique(dataFrame[columnId])
+    vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
+    one_hot_code = lambda x: vectorized_one_hot_coder(x, unique_vals)
 
-    def oneHotEncode(integerValue):
-        assert(type(integerValue) == int)
-        return format(integerValue, oneHotFormat)
+    # oneHotWidth = len(nominalValueList)
+    # oneHotFormat = "#0" + str(oneHotWidth+2) + "b"
+    #
+    # def oneHotEncode(integerValue):
+    #     assert(type(integerValue) == int)
+    #     return format(integerValue, oneHotFormat)
+    #
+    # # Create a mapping of nominal values to one-hot encoded in O(N) time.
+    # nominalValueDict = {}
+    # count = 0
+    # for nominalValue in nominalValueList:
+    #     nominalValueDict[nominalValue] = oneHotEncode(pow(2,count))
+    #     count += 1
 
-    # Create a mapping of nominal values to one-hot encoded in O(N) time.
-    nominalValueDict = {}
-    count = 0
-    for nominalValue in nominalValueList:
-        nominalValueDict[nominalValue] = oneHotEncode(pow(2,count))
-        count += 1
+    # for nominal, oneHot in nominalValueDict.items():
+    # data[columnId] = data[columnId] replace(nominal, oneHot, inplace=True)
+    one_hot_coded_data = data[columnId].apply(one_hot_code)
 
-    for nominal, oneHot in nominalValueDict.items():
-        data[columnId].replace(nominal, oneHot, inplace=True)
+
+
+    for i, v in enumerate(unique_vals):
+        data[f"{columnId}_{v}"] = [x[i] for x in one_hot_coded_data]
+    data = data.drop(columns=[columnId])
 
     if(not inplace):
         return data
@@ -178,20 +189,26 @@ def discretize(dataFrame, columnId, xargs={"dMethod": "frequency", "bins": 10}, 
 '''
 def standardize(trainingSetDF, testingSetDF, columnId, inplace=False):
     trainingSet = trainingSetDF if inplace else trainingSetDF.copy(deep=True)
-    testingSet = testingSetDF if inplace else testingSetDF.copy(deep=True)
     assert(type(trainingSet) == pandas.core.frame.DataFrame)
-    assert(type(testingSet) == pandas.core.frame.DataFrame)
     assert(type(columnId) == str)
     assert(keyExists(trainingSet, columnId))
-    assert(keyExists(testingSet, columnId))
+
 
     trainingColumnMean = np.mean(trainingSet[columnId])
     trainingColumnStd = np.std(trainingSet[columnId])
     trainingSet[columnId] = trainingSet[columnId].apply(lambda x: (x - trainingColumnMean) / trainingColumnStd)
-    testingSet[columnId] = testingSet[columnId].apply(lambda x: (x - trainingColumnMean) / trainingColumnStd)
+
+    if(testingSetDF):
+        testingSet = testingSetDF if inplace else testingSetDF.copy(deep=True)
+        assert (type(testingSet) == pandas.core.frame.DataFrame)
+        assert(keyExists(testingSet, columnId))
+        testingSet[columnId] = testingSet[columnId].apply(lambda x: (x - trainingColumnMean) / trainingColumnStd)
 
     if(not inplace):
-        return trainingSet, testingSet
+        if(testingSetDF):
+            return trainingSet, testingSet
+        else:
+            return trainingSet
 
 # partition: Partitions the dataset into k partitions, each of which
 #   contains a train, test, and (optionally) validation set.

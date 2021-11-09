@@ -2,6 +2,7 @@
 from lib.PreprocessingTK import *
 import pandas
 import numpy as np
+import os
 
 '''
 preprocessAbalone: All preprocessing for the Abalone dataset condensed into one function
@@ -38,8 +39,8 @@ def preprocessAbalone(numFolds=5):
         "Shell weight",
         "Rings"
     ]
-    data = pandas.read_csv("../../data/Abalone/abalone.data",
-                           names=featureNames)
+    file_path = os.path.join(os.path.dirname(__file__), "../../data/Abalone/abalone.data")
+    data = pandas.read_csv(file_path, names=featureNames)
 
     # Convert nominal data to categorical using one-hot encoding
     nominalFeatures = ["Sex"]
