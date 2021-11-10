@@ -133,108 +133,112 @@ class NeuralNetwork:
         while(True):
             epoch += 1
 
-            weight_updates = []
-            for layer in self.layers:
-                weight_updates.append(np.zeros(layer.shape))
 
-            for t in range(0, len(trainData)):
-                xt = trainData.iloc[t]
-                predicted_value = self.predict(xt)
-                actual_value = None
+            with alive_bar(len(trainData),
+                           title=f"Epoch #{epoch} - Delta: {update_delta}") as bar:
 
-                # use correct data type
-                if(self.task == "classification"):
-                    actual_value = self.one_hot_code(xt[yCol])
-                elif(self.task == "regression"):
-                    actual_value = [xt[yCol]]
-                elif(self.task == "autoencode"):
-                    actual_value = xt[yCol]
-                else:
-                    exit(286)
+                weight_updates = []
+                for layer in self.layers:
+                    weight_updates.append(np.zeros(layer.shape))
+                if(epoch == 893):
+                    print('hola')
 
-                # Append bias unit and convert to list
-                xt = list(pandas.concat([pandas.Series([1]), xt]))
+                for t in range(0, len(trainData)):
+                    xt = trainData.iloc[t]
+                    predicted_value = self.predict(xt)
+                    actual_value = None
+
+                    # use correct data type
+                    if(self.task == "classification"):
+                        actual_value = self.one_hot_code(xt[yCol])
+                    elif(self.task == "regression"):
+                        actual_value = [xt[yCol]]
+                    elif(self.task == "autoencode"):
+                        actual_value = xt[yCol]
+                    else:
+                        exit(286)
+
+                    # Append bias unit and convert to list
+                    xt = list(pandas.concat([pandas.Series([1]), xt]))
+
+                    '''
+                    Compute Backpropagated Error at Each of the Hidden Units
+                    '''
+
+                    # Update final layer error
+                    self.errors[-1] = np.subtract(actual_value, predicted_value)
+
+                    # Compute backpropagated error at each set of hidden units
+                    for layer_num in reversed(range(1, len(self.layers))):
+
+                        # Helpful variables to improve clarity
+                        num_input_units = self.layers[layer_num].shape[0]
+                        num_output_units = self.layers[layer_num].shape[1]
+                        error_unit_idx = layer_num - 1
+
+                        # Compute backpropagated error for each hidden unit in this layer
+                        for j in range(0, num_input_units):
+                            self.errors[error_unit_idx][j] = 0
+                            for i in range(0, num_output_units):
+                                error_weight = self.layers[layer_num][j][i]
+                                backpropagated_error = self.errors[error_unit_idx + 1]
+                                self.errors[error_unit_idx][j] += error_weight * backpropagated_error[i]
+
+                    '''
+                    Compute Updates
+                    '''
+
+                    # Iterate over each layer to update the weights
+                    for layer_num in range(0, len(self.layers)):
+
+                        # Initialize helpful variables
+                        is_final_layer = layer_num == len(self.layers) - 1
+                        layer = self.layers[layer_num]
+                        error = self.errors[layer_num]
+                        layer_inputs = self.layer_inputs[layer_num]
+                        num_input_units = layer.shape[0]
+                        num_output_units = layer.shape[1]
+
+                        # Initialize weight deltas to a zeroized dxK matrix
+                        layer_delta = np.zeros((num_input_units,num_output_units))
+
+                        # Set weight updates
+                        for j in range(0, num_input_units):
+                            for i in range(0, num_output_units):
+                                backpropagated_error = error[i]
+                                input_scalar = layer_inputs[j]
+
+                                # The final layer is a special case, since it does not require the chain rule for updating weights
+                                if(is_final_layer):
+                                    layer_delta[j][i] = backpropagated_error * input_scalar
+                                else:
+                                    layer_delta[j][i] = backpropagated_error * sigmoid_derivative(input_scalar) * input_scalar
+                        # nn_abalone, linear voting_records, linear forest fires
+                        weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
+                    bar()
 
                 '''
-                Compute Backpropagated Error at Each of the Hidden Units
+                Apply updates after all training examples
                 '''
-
-                # Update final layer error
-                self.errors[-1] = np.subtract(actual_value, predicted_value)
-
-                # Compute backpropagated error at each set of hidden units
-                for layer_num in reversed(range(1, len(self.layers))):
-
-                    # Helpful variables to improve clarity
-                    num_input_units = self.layers[layer_num].shape[0]
-                    num_output_units = self.layers[layer_num].shape[1]
-                    error_unit_idx = layer_num - 1
-
-                    # Compute backpropagated error for each hidden unit in this layer
-                    for j in range(0, num_input_units):
-                        self.errors[error_unit_idx][j] = 0
-                        for i in range(0, num_output_units):
-                            error_weight = self.layers[layer_num][j][i]
-                            backpropagated_error = self.errors[error_unit_idx + 1]
-                            self.errors[error_unit_idx][j] += error_weight * backpropagated_error[i]
-
-                '''
-                Compute Updates
-                '''
-
-                # Iterate over each layer to update the weights
                 for layer_num in range(0, len(self.layers)):
-
-                    # Initialize helpful variables
-                    is_final_layer = layer_num == len(self.layers) - 1
+                    # Helpful variables to improve clarity
                     layer = self.layers[layer_num]
-                    error = self.errors[layer_num]
-                    layer_inputs = self.layer_inputs[layer_num]
-                    num_input_units = layer.shape[0]
-                    num_output_units = layer.shape[1]
+                    layer_weight_deltas = weight_updates[layer_num] / len(trainData)
+                    self.layers[layer_num] = np.add(layer, layer_weight_deltas * self.learning_rate)
 
-                    # Initialize weight deltas to a zeroized dxK matrix
-                    layer_delta = np.zeros((num_input_units,num_output_units))
-
-                    # Set weight updates
-                    for j in range(0, num_input_units):
-                        for i in range(0, num_output_units):
-                            backpropagated_error = error[i]
-                            input_scalar = layer_inputs[j]
-
-                            # The final layer is a special case, since it does not require the chain rule for updating weights
-                            if(is_final_layer):
-                                layer_delta[j][i] = backpropagated_error * input_scalar
-                            else:
-                                layer_delta[j][i] = backpropagated_error * sigmoid_derivative(input_scalar) * input_scalar
-                    # nn_abalone, linear voting_records, linear forest fires
-                    weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
-
-            '''
-            Apply updates after all training examples
-            '''
-            for layer_num in range(0, len(self.layers)):
-                # Helpful variables to improve clarity
-                layer = self.layers[layer_num]
-                layer_weight_deltas = weight_updates[layer_num]
-                self.layers[layer_num] = np.add(layer, layer_weight_deltas * self.learning_rate)
-
-            err_sum = np.sum(np.sum(x) for x in self.errors)
-            print(f"Total Error={err_sum}")
-
-            '''
-            Compute Convergence
-            '''
-            new_update_delta = 0
-            for layer_num in range(0, len(self.layers)):
-                layer_weight_deltas = weight_updates[layer_num]
-                new_update_delta += np.sum(layer_weight_deltas)
-            if(np.abs((new_update_delta - update_delta + 1e-8) / (update_delta + 1e-6)) < self.convergence_threshold):
-                # Convergence reached
-                break
-            else:
-                self.learning_rate = 9.9 * self.learning_rate / 10 # Gradually reduce learning rate in time for convergence
-                update_delta = new_update_delta
+                '''
+                Compute Convergence
+                '''
+                new_update_delta = 0
+                for layer_num in range(0, len(self.layers)):
+                    layer_weight_deltas = weight_updates[layer_num]
+                    new_update_delta += np.sum(layer_weight_deltas)
+                if(np.abs((new_update_delta - update_delta + 1e-8) / (update_delta + 1e-6)) < self.convergence_threshold):
+                    # Convergence reached
+                    break
+                else:
+                    self.learning_rate = 9.9 * self.learning_rate / 10 # Gradually reduce learning rate in time for convergence
+                    update_delta = new_update_delta
 
 
     def score(self, testingSet: pandas.DataFrame):

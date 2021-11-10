@@ -139,7 +139,7 @@ if __name__ == "__main__":
             # Preprocess Data into folds
             folds = experiment["preprocessFunc"](numFolds)
 
-            # Standardize!
+            # Standardize and one-hot-code values!
             from pandas.api.types import is_numeric_dtype
             from lib.PreprocessingTK import standardize, convertNominal, partition
             all_folds = pandas.concat(folds)
