@@ -356,6 +356,59 @@ if __name__ == "__main__":
 
                 if (doAutoencoderNetwork):
                     clf.train_autoencoder(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                elif doNeuralNetwork:
+                    import time
+
+                    t0 = time.time()
+                    # Tune hidden layer sizes from 0.5 - 1.5 times the number of inputs
+                    num_inputs = len(trainingSet.columns) - 1
+                    fifty_percent_less_units = int(np.floor(num_inputs / 2))
+                    fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
+
+                    layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    combinations = []
+                    networks = []
+                    for j in layer1_range:
+                        for k in layer2_range:
+                            networks.append(NeuralNetwork())
+                            combinations.append([j, k])
+
+                    '''
+                    Multi-threading
+                    '''
+                    num_procs = len(combinations)
+                    jobs = []
+                    queue = None
+                    lock = multiprocessing.Lock()
+                    networks = []
+
+                    for proc_num in range(0, num_procs):
+                        combination = combinations[proc_num]
+                        tuning_xargs = copy.deepcopy(xargs)
+                        tuning_xargs["hidden_layer_dims"] = combination
+                        process = multiprocessing.Process(target=train_network,
+                                                          args=(trainingSet,
+                                                                experiment["yCol"],
+                                                                tuning_xargs,
+                                                                lock,
+                                                                networks,
+                                                                proc_num))
+
+                        jobs.append(process)
+
+                    # Start the threads (i.e. calculate the random number lists)
+                    for proc_num, j in enumerate(jobs):
+                        print(f"Starting thread {proc_num}")
+                        j.start()
+
+                    # Ensure all of the threads have finished
+                    for j in jobs:
+                        j.join()
+
+                    t1 = time.time()
+
+                    print(f"Time to train {num_procs} neural networks: {t1 - t0}")
                 else:
                     clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
 
