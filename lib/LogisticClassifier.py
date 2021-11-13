@@ -133,6 +133,7 @@ class LogisticClassifier:
         cross_ent = evaluateError(predictedScores, one_hot_coded, method=method)
         return cross_ent
 
+
     def predict(self, example: pandas.Series):
         '''
         Predict a class label using the logistic classifier

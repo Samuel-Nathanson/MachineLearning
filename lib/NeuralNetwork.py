@@ -5,20 +5,13 @@ from lib.SNUtils import zero_ish, sigmoid, softmax, sigmoid_derivative
 import copy
 from alive_progress import alive_bar
 
-
-def train_network(trainingSet, yCol, tuning_xargs, lock, networks, process_num):
-    nn = NeuralNetwork(process_num)
-    ntwk = nn.train(trainingSet, yCol, tuning_xargs, lock)
-    networks.append(ntwk)
-
 class NeuralNetwork:
 
-    def __init__(self, process_num=0):
+    def __init__(self):
         '''
         Constructor
         '''
         self.yCol = ""
-        self.process_num = process_num
         self.initialized = False
 
     def __str__(self):
@@ -140,7 +133,7 @@ class NeuralNetwork:
         self.train(trainData=trainData, yCol=yCol, xargs=xargs)
 
 
-    def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}, lock=None):
+    def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
         '''
         Train Neural Network based on training data
         '''
@@ -151,16 +144,9 @@ class NeuralNetwork:
         epoch = 0
         while True:
             epoch += 1
-            import sys
-            lock.acquire()
-            print(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}, Process #{self.process_num}, Hidden Layer Dims={self.hidden_layer_dims}")
-            sys.stdout.flush()
-            lock.release()
 
-            # message_queue.put(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}")
-            # with alive_bar(len(trainData),
-            #                title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
-            with open('file-path.txt', 'w') as file:
+            with alive_bar(len(trainData),
+                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
                 weight_updates = []
                 '''
                 Set weight updates to zero
@@ -241,7 +227,7 @@ class NeuralNetwork:
 
                         # Update layer weight deltas
                         weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
-                    # bar()
+                    bar()
 
 
                 # Adaptive Learning Rate
@@ -310,20 +296,20 @@ class NeuralNetwork:
                     # Not working now?
                     output += layer[j][i] * inputs[j]
                 # Don't squish the final layer with the activation function
-                if(not is_final_layer):
+                if not is_final_layer:
                     output = self.activation_function(output)
                 outputs[i] = output
             # Set inputs of next layer equal to outputs of this layer
             self.layer_inputs[layer_num] = inputs
             inputs = outputs
 
-        if(self.task == "classification"):
+        if self.task == "classification":
             # Use softmax to set the class probabilities
             prediction = softmax(outputs)
-        elif(self.task == "regression"):
+        elif self.task == "regression":
             # Set output equal to sum of final layer
             prediction = sum(outputs)
-        elif(self.task == "autoencode"):
+        elif self.task == "autoencode":
             prediction = outputs
 
         return prediction
