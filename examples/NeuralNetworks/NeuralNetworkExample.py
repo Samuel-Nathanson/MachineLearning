@@ -192,7 +192,7 @@ if __name__ == "__main__":
                     clf = NeuralNetwork()
                     name = "Neural Network"
                     xargs = {
-                        "learning_rate": 0.01,
+                        "learning_rate": 0.1,
                         "minibatch_learning": True, # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
                         "hidden_layer_dims": [8, 8], # TODO: Tune
@@ -204,7 +204,7 @@ if __name__ == "__main__":
                     clf = NeuralNetwork()
                     name = "Autoencoder Neural Network"
                     xargs = {
-                        "learning_rate": 0.001, # Increasing to 0.01 seems to cause divergence
+                        "learning_rate": 0.1, # Increasing to 0.01 seems to cause divergence
                         "minibatch_learning": True, # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
                         "hidden_layer_dims": [len(trainingSet.columns ) * 3], # TODO: Tune
@@ -263,7 +263,7 @@ if __name__ == "__main__":
                     clf = SimpleLinearNetwork()
                     name = "Linear Network"
                     xargs = {
-                        "learning_rate": 0.01,  # TODO: Tune
+                        "learning_rate": 0.1,  # TODO: Tune
                         "stochastic_gradient_descent": False, # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
                     }
@@ -274,7 +274,7 @@ if __name__ == "__main__":
                     clf = NeuralNetwork()
                     name = "Neural Network"
                     xargs = {
-                        "learning_rate": 0.01,
+                        "learning_rate": 0.1,
                         "minibatch_learning": True,  # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
                         "hidden_layer_dims": [8, 8],  # TODO: Tune
@@ -287,7 +287,7 @@ if __name__ == "__main__":
                     clf = NeuralNetwork()
                     name = "Autoencoder Neural Network"
                     xargs = {
-                        "learning_rate": 0.001,  # Increasing to 0.01 seems to cause divergence
+                        "learning_rate": 0.1,  # Increasing to 0.01 seems to cause divergence
                         "minibatch_learning": True,  # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
                         "hidden_layer_dims": [len(trainingSet.columns) - 3],  # TODO: Tune

@@ -70,23 +70,15 @@ class SimpleLinearNetwork:
             epoch_num +=1
 
             with alive_bar(len(trainData),
-                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}",
-                           bar="notes") as bar:
+                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()
                 for exampleIter in iter:
-                    example = exampleIter[1]
-                    actual_value = example[yCol]
-                    # This will become a valid probability distribution after applying the softmax func.
+                    example = exampleIter[1].drop(labels=self.yCol)
+                    actual_value = exampleIter[1][yCol]
 
-                    prediction = 0
-                    for j in range(0, self.num_inputs):
-                        if(type(example[j]) == str):
-                            #One-hot Encoded
-                            prediction += sum([int(x)*self.weights[j] for x in example[j][2:]])
-                        else:
-                            prediction += example[j] * self.weights[j]
+                    prediction = self.predict(example)
 
                     # Update Rule
                     for j in range(0, self.num_inputs):
@@ -95,9 +87,11 @@ class SimpleLinearNetwork:
                             weights_delta[j] += (actual_value - prediction) * sum([int(x)*self.weights[j] for x in example[j][2:]])
                         else:
                             weights_delta[j] += (actual_value - prediction) * example[j]
+
                     if(self.stochastic_gradient_descent):
                         self.weights += self.learning_rate * weights_delta
                         print(self.weights)
+
                     bar()
 
             if(not self.stochastic_gradient_descent):
@@ -126,6 +120,7 @@ class SimpleLinearNetwork:
         Predict a class label using the simple linear network
         '''
         prediction = 0
+        x = example.drop(columns=[self.yCol])
         for j in range(0, self.num_inputs):
             if (type(example[j]) == str):
                 # One-hot Encoded

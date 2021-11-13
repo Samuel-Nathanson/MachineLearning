@@ -123,6 +123,8 @@ class NeuralNetwork:
         '''
         Train Neural Network based on training data
         '''
+        # Tim Yeung
+        # 2508 Sassafras Street Erie PA 16502
         if(not self.initialized):
             self.initialize(trainData, yCol, xargs)
 

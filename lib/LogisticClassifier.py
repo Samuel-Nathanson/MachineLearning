@@ -103,10 +103,9 @@ class LogisticClassifier:
 
                     if(self.stochastic_gradient_descent):
                         self.weights += self.learning_rate * weights_delta
-                    time.sleep(0.001)
                     bar()
             if(not self.stochastic_gradient_descent):
-                self.weights += (self.learning_rate * weights_delta) / len(trainData)
+                self.weights += (self.learning_rate * weights_delta)
             # Batch Update
 
             if(convergent(weights_delta)):
