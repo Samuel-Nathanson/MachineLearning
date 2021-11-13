@@ -5,13 +5,20 @@ from lib.SNUtils import zero_ish, sigmoid, softmax, sigmoid_derivative
 import copy
 from alive_progress import alive_bar
 
+
+def train_network(trainingSet, yCol, tuning_xargs, lock, networks, process_num):
+    nn = NeuralNetwork(process_num)
+    ntwk = nn.train(trainingSet, yCol, tuning_xargs, lock)
+    networks.append(ntwk)
+
 class NeuralNetwork:
 
-    def __init__(self):
+    def __init__(self, process_num=0):
         '''
         Constructor
         '''
         self.yCol = ""
+        self.process_num = process_num
         self.initialized = False
 
     def __str__(self):
@@ -26,6 +33,17 @@ class NeuralNetwork:
         String conversion for print
         '''
         pass
+
+
+    def adapt_learning_rate(self, error):
+        a = .01
+        b = .01
+        if (self.previous_error - error) > 0:
+            # increase learning rate
+            self.learning_rate += a
+        else:
+            self.learning_rate -= self.learning_rate * b
+
 
     def initialize(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
         self.yCol = yCol
@@ -60,6 +78,8 @@ class NeuralNetwork:
         self.layers = []
         self.errors = []
         self.layer_inputs = []
+        self.previous_error = np.inf
+        self.stochastic_gradient_descent = False
 
         # Each layer has a set of weights. Set the weights for each of the layers
         for i, layer_dim in enumerate(layer_dims):
@@ -119,31 +139,34 @@ class NeuralNetwork:
 
         self.train(trainData=trainData, yCol=yCol, xargs=xargs)
 
-    def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
+
+    def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}, lock=None):
         '''
         Train Neural Network based on training data
         '''
-        # Tim Yeung
-        # 2508 Sassafras Street Erie PA 16502
         if(not self.initialized):
             self.initialize(trainData, yCol, xargs)
 
         # Backpropagation
         epoch = 0
-        update_delta = 0
-
-        while(True):
+        while True:
             epoch += 1
+            import sys
+            lock.acquire()
+            print(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}, Process #{self.process_num}, Hidden Layer Dims={self.hidden_layer_dims}")
+            sys.stdout.flush()
+            lock.release()
 
-
-            with alive_bar(len(trainData),
-                           title=f"Epoch #{epoch} - Delta: {update_delta}") as bar:
-
+            # message_queue.put(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}")
+            # with alive_bar(len(trainData),
+            #                title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
+            with open('file-path.txt', 'w') as file:
                 weight_updates = []
+                '''
+                Set weight updates to zero
+                '''
                 for layer in self.layers:
                     weight_updates.append(np.zeros(layer.shape))
-                if(epoch == 893):
-                    print('hola')
 
                 for t in range(0, len(trainData)):
                     xt = trainData.iloc[t]
@@ -215,32 +238,34 @@ class NeuralNetwork:
                                     layer_delta[j][i] = backpropagated_error * input_scalar
                                 else:
                                     layer_delta[j][i] = backpropagated_error * sigmoid_derivative(input_scalar) * input_scalar
-                        # nn_abalone, linear voting_records, linear forest fires
+
+                        # Update layer weight deltas
                         weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
-                    bar()
+                    # bar()
+
+
+                # Adaptive Learning Rate
+                error = self.score(trainData)
+                self.adapt_learning_rate(error)
 
                 '''
                 Apply updates after all training examples
                 '''
-                for layer_num in range(0, len(self.layers)):
-                    # Helpful variables to improve clarity
-                    layer = self.layers[layer_num]
-                    layer_weight_deltas = weight_updates[layer_num] / len(trainData)
-                    self.layers[layer_num] = np.add(layer, layer_weight_deltas * self.learning_rate)
+                if not self.stochastic_gradient_descent:
+                    for layer_num in range(0, len(self.layers)):
+                        # Helpful variables to improve clarity
+                        layer = self.layers[layer_num]
+                        layer_weight_deltas = weight_updates[layer_num] / len(trainData)
+                        self.layers[layer_num] = np.add(layer, layer_weight_deltas * self.learning_rate)
 
                 '''
                 Compute Convergence
                 '''
-                new_update_delta = 0
-                for layer_num in range(0, len(self.layers)):
-                    layer_weight_deltas = weight_updates[layer_num]
-                    new_update_delta += np.sum(layer_weight_deltas)
-                if(np.abs((new_update_delta - update_delta + 1e-8) / (update_delta + 1e-6)) < self.convergence_threshold):
-                    # Convergence reached
+                difference = np.abs(self.previous_error - error)
+                if difference < self.convergence_threshold:
                     break
-                else:
-                    self.learning_rate = 9.9 * self.learning_rate / 10 # Gradually reduce learning rate in time for convergence
-                    update_delta = new_update_delta
+
+                self.previous_error = error
 
 
     def score(self, testingSet: pandas.DataFrame):

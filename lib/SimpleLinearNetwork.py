@@ -21,6 +21,8 @@ class SimpleLinearNetwork:
         self.learning_rate = 0
         self.stochastic_gradient_descent = False
         self.convergence_threshold = 0
+        self.previous_error = np.inf
+
 
     def __str__(self):
         '''
@@ -34,6 +36,16 @@ class SimpleLinearNetwork:
         String conversion for print
         '''
         pass
+
+
+    def adapt_learning_rate(self, error):
+        a = .01
+        b = .01
+        if (self.previous_error - error) > 0:
+            # increase learning rate
+            self.learning_rate += a
+        else:
+            self.learning_rate -= self.learning_rate * b
 
 
     def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
@@ -70,7 +82,7 @@ class SimpleLinearNetwork:
             epoch_num +=1
 
             with alive_bar(len(trainData),
-                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}") as bar:
+                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()
@@ -90,16 +102,22 @@ class SimpleLinearNetwork:
 
                     if(self.stochastic_gradient_descent):
                         self.weights += self.learning_rate * weights_delta
-                        print(self.weights)
-
                     bar()
 
-            if(not self.stochastic_gradient_descent):
-                self.weights += ( self.learning_rate * weights_delta ) / len(trainData)
-            # Batch Update
+            # Adaptive Learning Rate
+            error = self.score(trainData)
+            self.adapt_learning_rate(error)
 
-            if(convergent(weights_delta)):
+            if not self.stochastic_gradient_descent:
+                # Batch Update
+                self.weights += (self.learning_rate * weights_delta) / len(trainData)
+
+            # Check for convergence
+            difference = np.abs(self.previous_error - error)
+            if difference < self.convergence_threshold:
                 break
+
+            self.previous_error = error
 
 
     def score(self, testingSet: pandas.DataFrame):

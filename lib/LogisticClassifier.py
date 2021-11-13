@@ -21,6 +21,7 @@ class LogisticClassifier:
         self.learning_rate = 0
         self.stochastic_gradient_descent = False
         self.convergence_threshold = 0
+        self.previous_error = np.inf
 
 
     def __str__(self):
@@ -35,6 +36,16 @@ class LogisticClassifier:
         String conversion for print
         '''
         return self.__str__()
+
+
+    def adapt_learning_rate(self, error):
+        a = .01
+        b = .01
+        if (self.previous_error - error) > 0:
+            # increase learning rate
+            self.learning_rate += a
+        else:
+            self.learning_rate -= self.learning_rate * b
 
 
     def train(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
@@ -55,27 +66,13 @@ class LogisticClassifier:
         # Initialize weights with random values between -0.01 and 0.01
         self.weights = (np.random.rand(self.num_inputs, self.num_outputs) * 0.02 ) - 0.01
 
-        weights_delta = None
-
-        def convergent(delta):
-            if(not hasattr(convergent, "prev_delta")):
-                convergent.prev_delta = delta
-                return False
-            else:
-                difference = np.abs(np.sum(np.abs(delta)) - np.sum(np.abs(convergent.prev_delta)))
-                convergent.prev_delta = delta
-                if(difference < self.convergence_threshold):
-                    return True
-            return False
-
         epoch_num = 0
         weights_delta = np.zeros(self.weights.shape)
-        import time
         while(True): # loop until convergence
             epoch_num +=1
 
             with alive_bar(len(trainData),
-                           title=f"Epoch #{epoch_num} - Delta: {np.sum(np.abs(weights_delta))}") as bar:
+                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()
@@ -104,12 +101,21 @@ class LogisticClassifier:
                     if(self.stochastic_gradient_descent):
                         self.weights += self.learning_rate * weights_delta
                     bar()
-            if(not self.stochastic_gradient_descent):
-                self.weights += (self.learning_rate * weights_delta)
-            # Batch Update
 
-            if(convergent(weights_delta)):
+            # Adaptive Learning Rate
+            error = self.score(trainData)
+            self.adapt_learning_rate(error)
+
+            if not self.stochastic_gradient_descent:
+                # Batch Update
+                self.weights += (self.learning_rate * weights_delta) / len(trainData)
+
+            # Check for convergence
+            difference = np.abs(self.previous_error - error)
+            if difference < self.convergence_threshold:
                 break
+
+            self.previous_error = error
 
 
     def score(self, testingSet: pandas.DataFrame):
@@ -131,7 +137,7 @@ class LogisticClassifier:
         '''
         Predict a class label using the logistic classifier
         '''
-        example = list(pandas.concat([pandas.Series([1]), example]))
+        example = list(pandas.concat([pandas.Series([1]), example]).drop(labels=self.yCol))
         class_probabilities = [0] * self.num_outputs
         for i in range(0, len(class_probabilities)):
             # Sum the current predicted weighted values
