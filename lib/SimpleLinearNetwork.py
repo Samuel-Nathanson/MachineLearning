@@ -39,11 +39,13 @@ class SimpleLinearNetwork:
 
 
     def adapt_learning_rate(self, error):
-        a = .01
-        b = .01
+        a = .001
+        b = .1
         if (self.previous_error - error) > 0:
             # increase learning rate
             self.learning_rate += a
+            if self.learning_rate > 1:
+                self.learning_rate = 1
         else:
             self.learning_rate -= self.learning_rate * b
 
@@ -86,8 +88,6 @@ class SimpleLinearNetwork:
 
         while(True): # loop until convergence
             epoch_num +=1
-            if(epoch_num >114):
-                print("hi")
 
             with alive_bar(len(trainData),
                            title=f"Epoch {epoch_num}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
@@ -148,7 +148,7 @@ class SimpleLinearNetwork:
         Predict a class label using the simple linear network
         '''
         prediction = 0
-        example = list(pandas.concat([pandas.Series([1]), example]).drop(columns=self.yCol))
+        example = list(pandas.concat([pandas.Series([1]), example]).drop(labels=self.yCol))
         for j in range(0, self.num_inputs):
             if (type(example[j]) == str):
                 # One-hot Encoded

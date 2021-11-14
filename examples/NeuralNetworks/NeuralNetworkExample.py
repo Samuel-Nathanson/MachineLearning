@@ -145,10 +145,13 @@ if __name__ == "__main__":
             from pandas.api.types import is_numeric_dtype
             from lib.PreprocessingTK import standardize, convertNominal, partition
             all_folds = pandas.concat(folds)
+
             for column_name in all_folds.drop(columns=experiment['yCol']).columns:
-                if(is_numeric_dtype(all_folds[column_name])):
-                    all_folds = standardize(trainingSetDF=all_folds, testingSetDF=None, columnId=column_name, inplace=False)
-                else:
+                if (is_numeric_dtype(all_folds[column_name])):
+                    all_folds = standardize(trainingSetDF=all_folds, testingSetDF=None, columnId=column_name,
+                                            inplace=False)
+            for column_name in all_folds.drop(columns=experiment['yCol']).columns:
+                if (not is_numeric_dtype(all_folds[column_name])):
                     all_folds = convertNominal(all_folds, column_name, experiment['categoricalValues'], inplace=False)
             folds = partition(all_folds, numFolds, classificationColumnId=experiment['yCol'])
 
