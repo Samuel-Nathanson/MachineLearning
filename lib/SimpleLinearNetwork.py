@@ -53,7 +53,7 @@ class SimpleLinearNetwork:
         Train logistic classifier based on training data
         '''
         self.yCol = yCol
-        self.num_inputs = len(trainData.drop(columns=[yCol]).columns)
+        self.num_inputs = len(trainData.drop(columns=[yCol]).columns) + 1
         self.xargs = xargs
         self.learning_rate = self.xargs["learning_rate"] if ("learning_rate" in xargs.keys()) else 0.001
         self.stochastic_gradient_descent = self.xargs["stochastic_gradient_descent"] if ("stochastic_gradient_descent" in self.xargs.keys()) else False
@@ -76,21 +76,31 @@ class SimpleLinearNetwork:
             return False
 
         epoch_num = 0
-        weights_delta = np.zeros(self.weights.shape)
+
+        def add_bias(x):
+            return pandas.concat([pandas.Series([1]), x])
+
+        def remove_output(x):
+            return x.drop(labels=self.yCol)
+
 
         while(True): # loop until convergence
             epoch_num +=1
+            if(epoch_num >114):
+                print("hi")
 
             with alive_bar(len(trainData),
-                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
+                           title=f"Epoch {epoch_num}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()
                 for exampleIter in iter:
-                    example = exampleIter[1].drop(labels=self.yCol)
-                    actual_value = exampleIter[1][yCol]
 
-                    prediction = self.predict(example)
+                    example_with_bias = add_bias(exampleIter[1])
+                    example = list(remove_output(example_with_bias))
+
+                    actual_value = example_with_bias[yCol]
+                    prediction = self.predict(exampleIter[1])
 
                     # Update Rule
                     for j in range(0, self.num_inputs):
@@ -138,7 +148,7 @@ class SimpleLinearNetwork:
         Predict a class label using the simple linear network
         '''
         prediction = 0
-        x = example.drop(columns=[self.yCol])
+        example = list(pandas.concat([pandas.Series([1]), example]).drop(columns=self.yCol))
         for j in range(0, self.num_inputs):
             if (type(example[j]) == str):
                 # One-hot Encoded
