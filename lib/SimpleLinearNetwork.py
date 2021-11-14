@@ -82,7 +82,7 @@ class SimpleLinearNetwork:
             epoch_num +=1
 
             with alive_bar(len(trainData),
-                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
+                           title=f"Epoch {epoch_num}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
                 weights_delta = np.zeros(self.weights.shape)
 
                 iter = (trainData.sample(frac=1) if self.stochastic_gradient_descent else trainData).iterrows()

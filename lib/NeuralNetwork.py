@@ -3,13 +3,15 @@ import pandas
 from lib.PreprocessingTK import evaluateError
 from lib.SNUtils import zero_ish, sigmoid, softmax, sigmoid_derivative
 import copy
+import dill # Required to pickle lambda functions
 from alive_progress import alive_bar
 
 
-def train_network(trainingSet, yCol, tuning_xargs, lock, networks, process_num):
+def train_network(trainingSet, yCol, tuning_xargs, lock, returnDict, tuningSet, process_num):
     nn = NeuralNetwork(process_num)
-    ntwk = nn.train(trainingSet, yCol, tuning_xargs, lock)
-    networks.append(ntwk)
+    nn.train(trainingSet, yCol, tuning_xargs, lock)
+    score = nn.score(tuningSet)
+    returnDict[score] = tuning_xargs["hidden_layer_dims"]
 
 class NeuralNetwork:
 
@@ -44,6 +46,8 @@ class NeuralNetwork:
         else:
             self.learning_rate -= self.learning_rate * b
 
+    def one_hot_code(self, x):
+        return self.vectorized_one_hot_coder(x, self.unique_vals)
 
     def initialize(self, trainData: pandas.DataFrame, yCol: str, xargs: dict={}):
         self.yCol = yCol
@@ -61,8 +65,7 @@ class NeuralNetwork:
 
         if (self.task == "classification"):
             self.unique_vals = np.unique(trainData[yCol])
-            vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
-            self.one_hot_code = lambda x: vectorized_one_hot_coder(x, self.unique_vals)
+            self.vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
             self.num_outputs = len(np.unique(trainData[yCol]))
         elif (self.task == "regression"):
             self.num_outputs = 1
@@ -113,8 +116,7 @@ class NeuralNetwork:
 
         if(self.task == "classification"):
             self.unique_vals = np.unique(trainData[yCol])
-            vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
-            self.one_hot_code = lambda x: vectorized_one_hot_coder(x, self.unique_vals)
+            self.vectorized_one_hot_coder = np.vectorize(lambda val, u_val: 1 if val == u_val else 0)
 
         # Remove Replicated Output Layer
         self.layers.pop(-1)
@@ -147,20 +149,22 @@ class NeuralNetwork:
         if(not self.initialized):
             self.initialize(trainData, yCol, xargs)
 
+        is_multiprocessed = not( not lock )
+
         # Backpropagation
         epoch = 0
         while True:
             epoch += 1
             import sys
-            lock.acquire()
-            print(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}, Process #{self.process_num}, Hidden Layer Dims={self.hidden_layer_dims}")
-            sys.stdout.flush()
-            lock.release()
 
-            # message_queue.put(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}")
-            # with alive_bar(len(trainData),
-            #                title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}") as bar:
-            with open('file-path.txt', 'w') as file:
+            if(is_multiprocessed):
+                lock.acquire()
+                print(f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}, Process #{self.process_num}, Hidden Layer Dims={self.hidden_layer_dims}")
+                sys.stdout.flush()
+                lock.release()
+            with alive_bar(len(trainData),
+                           title=f"Epoch {epoch}, E: {self.previous_error:.2f}, \u03B7={self.learning_rate:.4f}",
+                           disable=is_multiprocessed) as bar:
                 weight_updates = []
                 '''
                 Set weight updates to zero
@@ -241,7 +245,8 @@ class NeuralNetwork:
 
                         # Update layer weight deltas
                         weight_updates[layer_num] = np.add(weight_updates[layer_num], layer_delta)
-                    # bar()
+                    if(not is_multiprocessed):
+                        bar()
 
 
                 # Adaptive Learning Rate

@@ -16,6 +16,7 @@ from examples.Machine.Machine import preprocessMachine
 from lib.NeuralNetwork import NeuralNetwork, train_network
 from lib.SimpleLinearNetwork import SimpleLinearNetwork
 from lib.LogisticClassifier import LogisticClassifier
+import dill # Required to pickle lambda functions
 
 if __name__ == "__main__":
 
@@ -226,11 +227,18 @@ if __name__ == "__main__":
                     t0 = time.time()
                     # Tune hidden layer sizes from 0.5 - 1.5 times the number of inputs
                     num_inputs = len(trainingSet.columns) - 1
+
+                    # ten_percent_less_units = int(np.floor(num_inputs * 9/10))
+                    # ten_percent_more_units = int(np.ceil(num_inputs * 11/10))
+                    # layer1_range = range(ten_percent_less_units, ten_percent_more_units)
+                    # layer2_range = range(ten_percent_less_units, ten_percent_more_units)
+
                     fifty_percent_less_units = int(np.floor(num_inputs / 2))
                     fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
 
                     layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
                     layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
+
                     combinations = []
                     networks = []
                     for j in layer1_range:
@@ -245,7 +253,8 @@ if __name__ == "__main__":
                     jobs = []
                     queue = None
                     lock = multiprocessing.Lock()
-                    networks = []
+                    manager = multiprocessing.Manager()
+                    scores = manager.dict()
 
                     for proc_num in range(0, num_procs):
                         combination = combinations[proc_num]
@@ -256,7 +265,8 @@ if __name__ == "__main__":
                                                                 experiment["yCol"],
                                                                 tuning_xargs,
                                                                 lock,
-                                                                networks,
+                                                                scores,
+                                                                tuningSet,
                                                                 proc_num))
 
                         jobs.append(process)
@@ -273,6 +283,13 @@ if __name__ == "__main__":
                     t1 = time.time()
 
                     print(f"Time to train {num_procs} neural networks: {t1-t0}")
+
+                    bestScore = np.max([x for x in scores.keys()])
+                    bestDims = scores[bestScore] # Get dims of best network
+                    print(f"best dims={bestDims}")
+                    tuning_xargs["hidden_layer_dims"] = bestDims
+                    clf = NeuralNetwork()
+                    clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=tuning_xargs)
                 else:
                     clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
 
@@ -374,43 +391,58 @@ if __name__ == "__main__":
                             networks.append(NeuralNetwork())
                             combinations.append([j, k])
 
-                    '''
-                    Multi-threading
-                    '''
-                    num_procs = len(combinations)
-                    jobs = []
-                    queue = None
-                    lock = multiprocessing.Lock()
-                    networks = []
+                        '''
+                        Multi-threading
+                        '''
+                        num_procs = len(combinations)
+                        jobs = []
+                        queue = None
+                        lock = multiprocessing.Lock()
+                        manager = multiprocessing.Manager()
+                        scores = manager.dict()
 
-                    for proc_num in range(0, num_procs):
-                        combination = combinations[proc_num]
-                        tuning_xargs = copy.deepcopy(xargs)
-                        tuning_xargs["hidden_layer_dims"] = combination
-                        process = multiprocessing.Process(target=train_network,
-                                                          args=(trainingSet,
-                                                                experiment["yCol"],
-                                                                tuning_xargs,
-                                                                lock,
-                                                                networks,
-                                                                proc_num))
+                        for proc_num in range(0, num_procs):
+                            combination = combinations[proc_num]
+                            tuning_xargs = copy.deepcopy(xargs)
+                            tuning_xargs["hidden_layer_dims"] = combination
+                            process = multiprocessing.Process(target=train_network,
+                                                              args=(trainingSet,
+                                                                    experiment["yCol"],
+                                                                    tuning_xargs,
+                                                                    lock,
+                                                                    scores,
+                                                                    tuningSet,
+                                                                    proc_num))
 
-                        jobs.append(process)
+                            jobs.append(process)
 
-                    # Start the threads (i.e. calculate the random number lists)
-                    for proc_num, j in enumerate(jobs):
-                        print(f"Starting thread {proc_num}")
-                        j.start()
+                        # Start the threads (i.e. calculate the random number lists)
+                        for proc_num, j in enumerate(jobs):
+                            print(f"Starting thread {proc_num}")
+                            j.start()
 
-                    # Ensure all of the threads have finished
-                    for j in jobs:
-                        j.join()
+                        # Ensure all of the threads have finished
+                        for j in jobs:
+                            j.join()
 
-                    t1 = time.time()
+                        t1 = time.time()
 
-                    print(f"Time to train {num_procs} neural networks: {t1 - t0}")
-                else:
-                    clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                        print(f"Time to train {num_procs} neural networks: {t1 - t0}")
+
+                        bestScore = np.max([x for x in scores.keys()])
+                        bestDims = scores[bestScore]  # Get dims of best network
+                        print(f"best dims={bestDims}")
+                        tuning_xargs["hidden_layer_dims"] = bestDims
+                        clf = NeuralNetwork()
+                        clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=tuning_xargs)
+                    else:
+                        clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+
+                    # Find cross-entropy at each fold
+
+                    foldScore = clf.score(testingSet)
+                    print(f"Fold {i} : {score_name} on testing set = {foldScore}")
+                    foldScores.append(foldScore)
 
                 # Find MSE at each fold
 
