@@ -3,7 +3,6 @@ import pandas
 from lib.PreprocessingTK import evaluateError
 from lib.SNUtils import zero_ish, sigmoid, softmax, sigmoid_derivative
 import copy
-import dill # Required to pickle lambda functions
 from alive_progress import alive_bar
 
 
@@ -72,6 +71,7 @@ class NeuralNetwork:
         elif (self.task == "autoencode"):
             self.num_outputs = len(trainData[yCol].iloc[0])
 
+
         # We'll use this to generate the number of nodes for each hidden unit.
         # + Add one node to the input layer and each hidden layer for the bias unit.
         self.hidden_layer_dims = [x + 1 for x in self.hidden_layer_dims]
@@ -104,6 +104,7 @@ class NeuralNetwork:
         autoencoder_train_data.drop(columns=[yCol], inplace=True)
         new_xargs = copy.deepcopy(xargs)
         new_xargs["task"] = "autoencode"
+        new_xargs["hidden_layer_dims"] = [xargs["hidden_layer_dims"][0]]
 
         # Train autoencoder with output layer set to replicated inputs
         self.yCol = "AUTOENCODER_REPLICATED_INPUTS"
@@ -126,8 +127,8 @@ class NeuralNetwork:
         # insert two new layers
         # Reset y column
         self.yCol = yCol
-        first_hidden_layer_size = self.hidden_layer_dims[-1]
-        new_hidden_layer_size = first_hidden_layer_size
+        first_hidden_layer_size = xargs["hidden_layer_dims"][0]
+        new_hidden_layer_size = xargs["hidden_layer_dims"][1]
         new_output_layer_size = len(np.unique(trainData[yCol])) if self.task == "classification" else 1
         new_hidden_layer = zero_ish([first_hidden_layer_size, new_hidden_layer_size])
         new_output_layer = zero_ish([new_hidden_layer_size, new_output_layer_size])
@@ -282,7 +283,7 @@ class NeuralNetwork:
             prediction = self.predict(testingSet.iloc[x])
             predictedScores.append(prediction)
             # print(f"Actual Value= {testingSet[self.yCol].iloc[x]}, Predicted Score= {prediction}")
-        method = "cross-entropy" if (self.task == "classification" or self.task == "autoencode") else "MSE"
+        method = "cross-entropy" if (self.task == "classification") else "MSE"
 
         score = 0
         if(self.task == "classification"):

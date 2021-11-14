@@ -16,7 +16,6 @@ from examples.Machine.Machine import preprocessMachine
 from lib.NeuralNetwork import NeuralNetwork, train_network
 from lib.SimpleLinearNetwork import SimpleLinearNetwork
 from lib.LogisticClassifier import LogisticClassifier
-import dill # Required to pickle lambda functions
 
 if __name__ == "__main__":
 
@@ -65,6 +64,7 @@ if __name__ == "__main__":
             "preprocessFunc":preprocessBreastCancer,
             "runExperiment": doBreastCancer,
             "categoricalValues": [],
+            "tuned_hidden_dims": [9, 4]
         },
         "carEvaluations": {
             "yCol": "Evaluation",
@@ -73,7 +73,8 @@ if __name__ == "__main__":
             "experimentName": "Car Evaluation Prediction",
             "preprocessFunc": preprocessCars,
             "runExperiment": doCarEvaluations,
-            "categoricalValues": []
+            "categoricalValues": [],
+            "tuned_hidden_dims": [5,6]
         },
         "votingRecords": {
             "yCol": "affiliation",
@@ -99,7 +100,8 @@ if __name__ == "__main__":
                 "crime",
                 "duty-free-exports",
                 "export-administration-act-south-africa"
-            ]
+            ],
+            "tuned_hidden_dims": [46, 46]
         },
         "forestFires": {
             "yCol": "Area",
@@ -107,7 +109,8 @@ if __name__ == "__main__":
             "experimentName": "Forest Fires Burned Area Prediction",
             "preprocessFunc": preprocessForestFires,
             "runExperiment": doForestFires,
-            "categoricalValues": ["Day", "Month"]
+            "categoricalValues": ["Day", "Month"],
+            "tuned_hidden_dims": [15,38]
         },
         "abalone": {
             "yCol": "Rings",
@@ -115,7 +118,8 @@ if __name__ == "__main__":
             "experimentName": "Abalone Age Prediction",
             "preprocessFunc": preprocessAbalone,
             "runExperiment": doAbalone,
-            "categoricalValues": ["Sex"]
+            "categoricalValues": ["Sex"],
+            "tuned_hidden_dims": [5, 14]
         },
         "machine": {
             "yCol": "ERP",
@@ -123,7 +127,8 @@ if __name__ == "__main__":
             "experimentName": "Machine Performance",
             "preprocessFunc": preprocessMachine,
             "runExperiment": doMachine,
-            "categoricalValues": []
+            "categoricalValues": [],
+            "tuned_hidden_dims": [6,9]
         }
     }
 
@@ -209,7 +214,7 @@ if __name__ == "__main__":
                         "learning_rate": 0.1, # Increasing to 0.01 seems to cause divergence
                         "minibatch_learning": True, # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
-                        "hidden_layer_dims": [len(trainingSet.columns ) * 3], # TODO: Tune
+                        "hidden_layer_dims": experiment["tuned_hidden_dims"], # TODO: Tune
                         "task": "classification"
                     }
                 else:
@@ -228,16 +233,16 @@ if __name__ == "__main__":
                     # Tune hidden layer sizes from 0.5 - 1.5 times the number of inputs
                     num_inputs = len(trainingSet.columns) - 1
 
-                    # ten_percent_less_units = int(np.floor(num_inputs * 9/10))
-                    # ten_percent_more_units = int(np.ceil(num_inputs * 11/10))
-                    # layer1_range = range(ten_percent_less_units, ten_percent_more_units)
-                    # layer2_range = range(ten_percent_less_units, ten_percent_more_units)
+                    ten_percent_less_units = int(np.floor(num_inputs -2))
+                    ten_percent_more_units = int(np.ceil(num_inputs +1))
+                    layer1_range = range(ten_percent_less_units, ten_percent_more_units)
+                    layer2_range = range(ten_percent_less_units, ten_percent_more_units)
 
-                    fifty_percent_less_units = int(np.floor(num_inputs / 2))
-                    fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
-
-                    layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
-                    layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    # fifty_percent_less_units = int(np.floor(num_inputs / 2))
+                    # fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
+                    #
+                    # layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    # layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
 
                     combinations = []
                     networks = []
@@ -271,6 +276,7 @@ if __name__ == "__main__":
 
                         jobs.append(process)
 
+                    # Time to train 81 networks: 111.82631874084473
                     # Start the threads (i.e. calculate the random number lists)
                     for proc_num, j in enumerate(jobs):
                         print(f"Starting thread {proc_num}")
@@ -307,7 +313,7 @@ if __name__ == "__main__":
 
         elif (experiment["task"] == "regression"):
 
-            foldMSEs = []
+            foldScores = []
             for i in range(0, len(folds)-1):
 
                 # Pop Tuning set from the folds
@@ -361,7 +367,7 @@ if __name__ == "__main__":
                         "learning_rate": 0.1,  # Increasing to 0.01 seems to cause divergence
                         "minibatch_learning": True,  # Not implemented yet
                         "convergence_threshold": common_convergence_threshold,
-                        "hidden_layer_dims": [len(trainingSet.columns) - 3],  # TODO: Tune
+                        "hidden_layer_dims": experiment["tuned_hidden_dims"],  # TODO: Tune
                         "task": "regression"
                     }
                 else:
@@ -379,11 +385,15 @@ if __name__ == "__main__":
                     t0 = time.time()
                     # Tune hidden layer sizes from 0.5 - 1.5 times the number of inputs
                     num_inputs = len(trainingSet.columns) - 1
-                    fifty_percent_less_units = int(np.floor(num_inputs / 2))
-                    fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
+                    # fifty_percent_less_units = int(np.floor(num_inputs / 2))
+                    # fifty_percent_more_units = int(num_inputs + fifty_percent_less_units)
+                    #
+                    # layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    # layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
 
-                    layer1_range = range(fifty_percent_less_units, fifty_percent_more_units)
-                    layer2_range = range(fifty_percent_less_units, fifty_percent_more_units)
+                    layer1_range = [15]
+                    layer2_range = [38
+                                    ]
                     combinations = []
                     networks = []
                     for j in layer1_range:
@@ -435,23 +445,17 @@ if __name__ == "__main__":
                         tuning_xargs["hidden_layer_dims"] = bestDims
                         clf = NeuralNetwork()
                         clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=tuning_xargs)
-                    else:
-                        clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
+                else:
+                    clf.train(trainData=trainingSet, yCol=experiment["yCol"], xargs=xargs)
 
-                    # Find cross-entropy at each fold
+                # Find cross-entropy at each fold
 
-                    foldScore = clf.score(testingSet)
-                    print(f"Fold {i} : {score_name} on testing set = {foldScore}")
-                    foldScores.append(foldScore)
-
-                # Find MSE at each fold
-
-                foldMSE = clf.score(testingSet)
-                print(f"Fold {i} : MSE on testing set = {foldMSE}")
-                foldMSEs.append(foldMSE)
+                foldScore = clf.score(testingSet)
+                print(f"Fold {i} : {score_name} on testing set = {foldScore}")
+                foldScores.append(foldScore)
 
             # Print average cross-entropy score across all folds
-            meanfoldScore = np.mean(foldMSEs)
+            meanfoldScore = np.mean(foldScores)
             print(f"Fold Mean Score: {meanfoldScore}")
 
         print(f"Successfully ran {experiment['experimentName']}")

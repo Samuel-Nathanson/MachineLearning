@@ -325,7 +325,15 @@ def evaluateError(predictedValues, expectedValues, method='MSE', classLabel=1):
         # np.subtract is 50% slower than my method
         se = 0
         for index in range(0, len(predictedValues)):
-            se += (expectedValues[index] - predictedValues[index]) ** 2
+            if(isinstance(predictedValues[index], list)):
+                sub_se = 0
+                for i, val in enumerate(predictedValues[index]):
+                    print(i)
+                    sub_se += (expectedValues[index][i] - predictedValues[index][i]) ** 2
+                sub_se = sub_se / len(expectedValues[index])
+                se += sub_se
+            else:
+                se += (expectedValues[index] - predictedValues[index]) ** 2
         mse = se / len(predictedValues)
         return mse
 
