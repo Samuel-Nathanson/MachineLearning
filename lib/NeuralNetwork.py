@@ -12,6 +12,7 @@ def train_network(trainingSet, yCol, tuning_xargs, lock, returnDict, tuningSet, 
     score = nn.score(tuningSet)
     returnDict[score] = tuning_xargs["hidden_layer_dims"]
 
+
 class NeuralNetwork:
 
     def __init__(self, process_num=0):
