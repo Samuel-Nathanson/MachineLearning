@@ -329,7 +329,7 @@ def racetrack_experiment(track_name: str,
 
 
 
-        new_state = new_position + velocity
+        new_state = new_position + new_velocity
 
         return new_state, new_position, new_velocity, crashed, out_of_bounds
 
@@ -349,10 +349,10 @@ def racetrack_experiment(track_name: str,
 
         # Penalty for crashing
         if( crashed or out_of_bounds ):
-            total_reward = -20
+            total_reward = -1000
 
         if is_in_finish(new_position):
-            total_reward += 10
+            total_reward += 500
 
         return total_reward
 
@@ -677,8 +677,10 @@ def racetrack_experiment(track_name: str,
 
         # With probability epsilon, choose a random action with uniform probability. Otherwise exploit Q-Values.
         if(random.random() < epsilon):
+            #explore
             return actions[random.randint(0,len(actions) - 1)]
         else:
+            #exploit
             # Choose action at random, with weights given by probabilities
             q_values = [q[state][action] for action in actions]
             softmax_denominator = np.sum([np.exp(q[state][action])/temperature for action in actions])
@@ -703,7 +705,7 @@ def racetrack_experiment(track_name: str,
 
 
         # Set number of full episodes (Start->Finish) to run.
-        episodes = 50
+        episodes = 150
         for episode_num in range(0, episodes):
             state = get_starting_state()
 
@@ -752,7 +754,7 @@ def racetrack_experiment(track_name: str,
 
 
         # Set number of full episodes (Start->Finish) to run.
-        episodes = 50
+        episodes = 150
         for episode_num in range(0, episodes):
             state = get_starting_state()
 
