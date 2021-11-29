@@ -9,8 +9,8 @@ import sys
 import random
 np.set_printoptions(threshold=sys.maxsize, linewidth=2000)
 
-MAX_VELOCITY_MAGNITUDE = 1
-MIN_VELOCITY_MAGNITUDE = -1
+MAX_VELOCITY_MAGNITUDE = 5
+MIN_VELOCITY_MAGNITUDE = -5
 
 def racetrack_experiment(track_name: str,
                          track_matrix: np.chararray,
@@ -39,8 +39,12 @@ def racetrack_experiment(track_name: str,
     Data / Visualizations
     ================================================================
     '''
-    def visualize_board(optimal_path, optimal_policy):
+    def visualize_board(optimal_path, title=""):
         import matplotlib.pyplot as plt
+        ax = plt.figure()
+
+        num_crashses = 0
+
         for y, x in np.ndindex(track_matrix.shape):
             if (track_matrix[y, x] == '#'):
                 color = 'black'
@@ -56,10 +60,172 @@ def racetrack_experiment(track_name: str,
                 shape = 'x'
             plt.plot([x], [y], marker=shape, color=color, markersize=10)
 
-        for (y, x) in optimal_path:
-            plt.plot([x], [y], marker='.', color='blue', markersize=5)
+        for i, state_t in enumerate(optimal_path):
+            new_position = state_t["position"]
+            new_velocity = state_t["velocity"]
+            will_crash = state_t["will_crash"]
+            acceleration = state_t["acceleration"]
+            will_go_out_of_bounds = state_t["will_go_out_of_bounds"]
+            x = new_position[1]
+            y = new_position[0]
 
-        plt.show()
+            marker = 'H'
+            position_color = "blue"
+            velocity_color = "green"
+            acceleration_color = "purple"
+            crash_color = "red"
+            if(will_crash or will_go_out_of_bounds):
+                num_crashses +=1
+                velocity_color = crash_color
+                acceleration_color = crash_color
+
+            # Plot position
+            plt.plot([x], [y], marker=marker, color=position_color, markersize=5)
+            # Plot velocity in color
+            plt.arrow(x,
+                      y,
+                      new_velocity[1],
+                      new_velocity[0],
+                      color=velocity_color,
+                      length_includes_head=True,
+                      overhang=1,
+                      width=0.01,
+                      shape="left",
+                      head_width=0.2, head_length=0.2 )
+            # Plot acceleration
+            plt.arrow(x,
+                      y,
+                      acceleration[1],
+                      acceleration[0],
+                      color=acceleration_color,
+                      length_includes_head=True,
+                      overhang=1,
+                      width=0.01,
+                      shape="right",
+                      head_width=0.1, head_length=0.2,
+                      head_starts_at_zero=True)
+
+        ## Add legend, title, and axes label, save
+
+        plt.ylabel("y-coordinate")
+        plt.xlabel("x-coordinate")
+        plt.title(title)
+
+        t = int(title.split(' ')[2])
+
+        # plt.figure(figsize=(1.92, 1.08), dpi=100)
+        figure = plt.gcf()
+        figure.set_size_inches(19.2, 10.8)
+
+        legend_elements = [plt.Line2D([0], [0], color='blue', lw=4, label='Position'),
+                           plt.Line2D([0], [0], color='green', lw=4, label='Velocity'),
+                           plt.Line2D([0], [0], color='purple', lw=4, label='Acceleration'),
+                           plt.Line2D([0], [0], color='red', lw=4, label='Crash occurred')]
+
+        stats_elements = [plt.Line2D([0], [0], marker='o', color='yellow', label='Training Episodes',
+                                     markerfacecolor='yellow', markersize=15),
+                          plt.Line2D([0], [0], marker='o', color='blue', label=f'# Actions Required: {len(optimal_path)}',
+                                    markerfacecolor='blue', markersize=15),
+                          plt.Line2D([0], [0], marker='o', color='red', label=f'# Crashses: {num_crashses}',
+                                     markerfacecolor='red', markersize=15)]
+
+        # Create the figure
+        ax.legend(handles=legend_elements, loc='upper right')
+        ax.legend(handles=stats_elements, loc='upper left')
+
+
+        plt.savefig(f"results/{algorithm_name}_{track_name}_{t}.png", dpi=100)
+        plt.clf()
+        plt.close('all')
+
+
+    def race_with_policy(policy, visualize=False, title=""):
+        start_state = get_starting_state()
+        state_path = []
+
+        state_0 = {
+            "state": start_state,
+            "position": get_position(start_state),
+            "velocity": (0,0),
+            "crashed": False,
+            "out_of_bounds": False
+        }
+        state_path.append(state_0)
+
+        while True:
+            previous_state = state_path[-1]["state"]
+            new_state, new_position, new_velocity, crashed, out_of_bounds = update_state(previous_state, policy[previous_state])
+            state_path[-1]["will_crash"] = crashed
+            state_path[-1]["will_go_out_of_bounds"] = out_of_bounds
+
+            state_t = {
+                "state": new_state,
+                "position": new_position,
+                "velocity": new_velocity,
+                "crashed": crashed,
+                "out_of_bounds": out_of_bounds,
+                "acceleration": policy[previous_state],
+                "will_crash": False, # Adding this to prevent exceptions on final state plotting
+                "will_go_out_of_bounds": False #
+            }
+
+            state_path.append(state_t)
+
+            if (track_matrix[new_position] == 'F'):
+                break
+
+        if(visualize):
+            visualize_board(optimal_path=state_path,  title=title)
+
+
+    def race_with_q_table(q, visualize=False, title=""):
+
+        # Epsilon Greedy gradually decreases epsilon and uses a temperature variables to switch from exploration
+        # To exploitation
+        # We want to promote exploitation once we have a well-trained q-table, thus we should artificially simulate
+        # exploitation
+        EXPLOITATION_PROMOTING_EPISODE_CONSTANT = 100
+
+        start_state = get_starting_state()
+        state_path = []
+
+        state_0 = {
+            "state": start_state,
+            "position": get_position(start_state),
+            "velocity": (0,0),
+            "crashed": False,
+            "out_of_bounds": False
+        }
+        state_path.append(state_0)
+
+        while True:
+            previous_state = state_path[-1]["state"]
+            action = choose_action_epsilon_greedy(q, previous_state, iteration=EXPLOITATION_PROMOTING_EPISODE_CONSTANT)
+            new_state, new_position, new_velocity, crashed, out_of_bounds = update_state(previous_state, action)
+            state_path[-1]["will_crash"] = crashed
+            state_path[-1]["will_go_out_of_bounds"] = out_of_bounds
+            state_path[-1]["acceleration"] = action
+
+            state_t = {
+                "state": new_state,
+                "position": new_position,
+                "velocity": new_velocity,
+                "crashed": crashed,
+                "out_of_bounds": out_of_bounds,
+                "will_crash": False, # Adding this to prevent exceptions on final state plotting
+                "will_go_out_of_bounds": False, #
+                "acceleration": (0,0)
+            }
+
+            state_path.append(state_t)
+
+            if (track_matrix[new_position] == 'F'):
+                break
+
+        if(visualize):
+            visualize_board(optimal_path=state_path, title=title)
+
+
     '''
     ================================================================
     Random Action Functions
@@ -161,9 +327,34 @@ def racetrack_experiment(track_name: str,
             else:
                 new_position = get_starting_coordinates()
 
+
+
         new_state = new_position + velocity
 
         return new_state, new_position, new_velocity, crashed, out_of_bounds
+
+
+    def get_reward(previous_position, new_position, crashed, out_of_bounds):
+        previous_finish_distances = 0
+        new_finish_distances = 0
+        finish_coordinates = get_finish_coordinates()
+
+        total_reward = -5
+
+        # Reward for moving closer to the finish line
+        for finish_point in finish_coordinates:
+            previous_finish_distances += manhattan_distance(previous_position, finish_point)
+            new_finish_distances += manhattan_distance(new_position, finish_point)
+        total_reward += (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
+
+        # Penalty for crashing
+        if( crashed or out_of_bounds ):
+            total_reward = -20
+
+        if is_in_finish(new_position):
+            total_reward += 10
+
+        return total_reward
 
 
     def get_probability_of_action_success():
@@ -191,10 +382,6 @@ def racetrack_experiment(track_name: str,
 
     def get_possible_velocities():
         velocities = []
-        # for v_x in range(-5,6):
-        #     for v_y in range(-5,6):
-        #         velocities.append((v_y, v_x))
-
         for v_x in range(MIN_VELOCITY_MAGNITUDE,MAX_VELOCITY_MAGNITUDE +1):
             for v_y in range(MIN_VELOCITY_MAGNITUDE,MAX_VELOCITY_MAGNITUDE +1):
                 velocities.append((v_y, v_x))
@@ -260,6 +447,9 @@ def racetrack_experiment(track_name: str,
 
 
     def safe_print(*args):
+        '''
+        Thread-safe printing to console
+        '''
         if(lock):
             lock.acquire()
             print(" ".join(map(str, args)))
@@ -268,7 +458,11 @@ def racetrack_experiment(track_name: str,
         else:
             print(" ".join(map(str, args)))
 
+
     def manhattan_distance(p1, p2):
+        '''
+        Manhattan distance between two points
+        '''
         y1 = p1[0]
         x1 = p1[1]
         y2 = p2[0]
@@ -277,7 +471,7 @@ def racetrack_experiment(track_name: str,
 
 
     def swap(a, b):
-        # challenged myself, swapping without a tmp variable.
+        # challenged myself to swap without a tmp variable.
         # a = a + b
         # b = b + a
         # a = a - b
@@ -286,7 +480,15 @@ def racetrack_experiment(track_name: str,
         # return a, b
         return b, a
 
+
     def get_path(p_start, p_end):
+        '''
+        Returns the path [(y0, x0), ... (yN, xN)] between two points
+        .#...
+        ..#..
+        ...#.
+        ....#
+        '''
         path = set([])
 
         y_0 = p_start[0]
@@ -328,13 +530,21 @@ def racetrack_experiment(track_name: str,
 
 
     def crashed_through_wall(p_start, p_end):
+        '''
+        Given a starting and ending point, detects whether or not a wall ('#') intersects the line segment between
+        the starting and ending point.
+        '''
         points_to_check = get_path(p_start, p_end)
         for point in points_to_check:
             if(track_matrix[point] == "#"):
                 return True
         return False
 
+
     def get_crash_location(p_start, p_end):
+        '''
+        Given a starting point and ending point, returns the point before the crash occurred.
+        '''
         vehicle_path = get_path(p_start, p_end)
 
         # need to find points closest to the starting point, just before the wall
@@ -351,6 +561,10 @@ def racetrack_experiment(track_name: str,
 
 
     def is_in_finish(position):
+        '''
+        Detects whether the given position is at the finish line
+        # TODO: *Crosses* finish line
+        '''
         y = position[0]
         x = position[1]
         finish = track_matrix[y,x] == 'F'
@@ -358,6 +572,9 @@ def racetrack_experiment(track_name: str,
 
 
     def is_outside_bounds(position):
+        '''
+        Detects whether the position is outside of the bounds of the track
+        '''
         y = position[0]
         x = position[1]
 
@@ -370,41 +587,33 @@ def racetrack_experiment(track_name: str,
         return False
 
 
-    def reward(state, action, failed_action=None):
+    def reward(state, action, failed_action: bool=None):
+        '''
+        Reward function, given a state and action.
+        :param failed_action: Manually detect whether or not a failed action occurred. Default is none, which means this
+        will be randomly selected
+        '''
         new_state, new_position, new_velocity, crashed, out_of_bounds = update_state(state, action, failed_action)
-
-        x_0 = state[1]
-        y_0 = state[0]
-        p0 = (y_0, x_0)
-
-        previous_finish_distances = 0
-        new_finish_distances = 0
-        finish_coordinates = get_finish_coordinates()
-
-        for finish_point in finish_coordinates:
-            previous_finish_distances += manhattan_distance(p0, finish_point)
-            new_finish_distances += manhattan_distance(new_position, finish_point)
-
-        # We want reward to be positive
-        total_reward = (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
-
-        if( crashed or out_of_bounds ):
-            total_reward = -20
-
-        if is_in_finish(new_position):
-            total_reward += 10
-
-        return total_reward
+        return get_reward(previous_position=get_position(state),
+                          new_position=new_position,
+                          crashed=crashed,
+                          out_of_bounds=out_of_bounds)
 
 
     def value_iteration_experiment():
-        # initialize states
-        v = {}
-        q = {}
-        pi = {}
+        '''
+        Value Iteration Experiment
+        '''
+        # initialize list of valid states and actions
         valid_states = get_possible_valid_states()
         actions = get_possible_actions()
 
+        # initialize tables
+        v = {} # value table
+        q = {}
+        pi = {} # optimal policy table
+
+        # initialize value table to arbitrary random values
         v[0] = {}
         for state in valid_states:
             v[0][state] = random.random() * 10 - 5 # Arbitrary random values between -5, 5
@@ -416,10 +625,7 @@ def racetrack_experiment(track_name: str,
             pi[t] = {}
             v[t] = {}
 
-            # Monitor progress
-            # total_iterations = len(valid_states) * len(actions)
-            # iteration = 0
-
+            # Update the value table, q-table, and policy table for state/action pairs
             for s in valid_states:
                 q[t][s] = {}
                 for a in actions:
@@ -445,34 +651,140 @@ def racetrack_experiment(track_name: str,
                 pi[t][s] = max(q[t][s], key=q[t][s].get)
                 v[t][s] = q[t][s][pi[t][s]]
 
+            # Visualize agent behavior after each iteration
+            visualization_title = f"Policy after {t} iterations for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}"
+            race_with_policy(pi[t], visualize=True, title=visualization_title)
 
+            # Detect convergence
             differences = abs(np.subtract(list(v[t].values()), list(v[t-1].values())))
-
             safe_print(f"t={t}, Vdiff_max={max(differences)}, threshold={convergence_threshold} : {track_name}/{algorithm_name}/{crash_scenario_name}")
-
             if(all(i < convergence_threshold for i in differences)):
                 break
 
-        current_state = get_starting_state()
-        current_position = get_position(current_state)
-        travel_positions = [current_position]
-        while(track_matrix[current_position] != 'F'):
-            current_state, current_position, nv, crashed, out_of_bounds = update_state(current_state, pi[t][current_state])
-            travel_positions.append(current_position)
-            if(crashed or out_of_bounds):
-                print("Crashed during test!")
-                exit(95)
 
-        visualize_board(optimal_path=travel_positions, optimal_policy=pi)
+    def choose_action_epsilon_greedy(q: dict, state: list, iteration: int):
+        '''
+        Given a state and Q-Table, choose an action using the Epsilon-Greedy Policy.
+        '''
+        actions = get_possible_actions()
 
+        # Iteration (episode) number will be used to control both temperature and epsilon.
+        temperature = iteration + 1
+        initial_epsilon = 0.1
 
+        # Gradually decrease epsilon with more episodes
+        epsilon = np.power(initial_epsilon, 1 + iteration / 10)
+
+        # With probability epsilon, choose a random action with uniform probability. Otherwise exploit Q-Values.
+        if(random.random() < epsilon):
+            return actions[random.randint(0,len(actions) - 1)]
+        else:
+            # Choose action at random, with weights given by probabilities
+            q_values = [q[state][action] for action in actions]
+            softmax_denominator = np.sum([np.exp(q[state][action])/temperature for action in actions])
+            softmax_numerators = [np.exp(q_value)/temperature for q_value in q_values]
+            action_probabilities = np.divide(softmax_numerators, softmax_denominator)
+            chosen_action = random.choices(actions, action_probabilities)
+            return chosen_action[0]
 
 
     def q_learning_experiment():
-        pass
+
+        # Initialize q-table, possible states & actions.
+        q = {}
+        valid_states = get_possible_valid_states()
+        actions = get_possible_actions()
+
+        # Initialize Q-Values to random values
+        for state in valid_states:
+            q[state] = {}
+            for action in actions:
+                q[state][action] = random.random() * 0.001 # Arbitrary random values
+
+
+        # Set number of full episodes (Start->Finish) to run.
+        episodes = 50
+        for episode_num in range(0, episodes):
+            state = get_starting_state()
+
+            while True:
+                # Loop until the agent finishes the race
+
+                # Choose an action using an epsilon greedy policy
+                action = choose_action_epsilon_greedy(q, state, episode_num)
+
+                # Get new state and reward using action derived from Epsilon greedy
+                new_state, new_position, new_velocity, crashed, out_of_bounds = update_state(state, action)
+                reward = get_reward(previous_position=get_position(state),
+                                  new_position=new_position,
+                                  crashed=crashed,
+                                  out_of_bounds=out_of_bounds)
+
+                # Update Q-Values
+                best_future_action = max(q[new_state], key=q[new_state].get)
+                q[state][action] += learning_rate * ( reward + discount_factor * q[state][best_future_action] - q[state][action])
+
+                # Update state
+                state = new_state
+
+                # Detect whether or not the agent finished
+                if is_in_finish(new_position):
+                    break
+
+            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}")
+            # Visualize resulting agent behavior at the end of each episode
+            visualization_title = f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}"
+            race_with_q_table(q, visualize=True, title=visualization_title)
+
 
     def sarsa_experiment():
-        pass
+
+        # Initialize q-table, possible states & actions.
+        q = {}
+        valid_states = get_possible_valid_states()
+        actions = get_possible_actions()
+
+        # Initialize Q-Values to random values
+        for state in valid_states:
+            q[state] = {}
+            for action in actions:
+                q[state][action] = random.random() * 0.001 # Arbitrary random values
+
+
+        # Set number of full episodes (Start->Finish) to run.
+        episodes = 50
+        for episode_num in range(0, episodes):
+            state = get_starting_state()
+
+            while True:
+                # Loop until the agent finishes the race
+
+                # Choose an action using an epsilon greedy policy
+                action = choose_action_epsilon_greedy(q, state, episode_num)
+
+                # Get new state and reward using action derived from Epsilon greedy
+                new_state, new_position, new_velocity, crashed, out_of_bounds = update_state(state, action)
+                reward = get_reward(previous_position=get_position(state),
+                                  new_position=new_position,
+                                  crashed=crashed,
+                                  out_of_bounds=out_of_bounds)
+
+                # Update Q-Values
+                future_action = choose_action_epsilon_greedy(q, new_state, episode_num)
+                q[state][action] += learning_rate * ( reward + discount_factor * q[new_state][future_action] - q[state][action])
+
+                # Update state
+                state = new_state
+
+                # Detect whether or not the agent finished
+                if is_in_finish(new_position):
+                    break
+
+            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}")
+            # Visualize resulting agent behavior at the end of each episode
+            visualization_title = f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}"
+            race_with_q_table(q, visualize=True, title=visualization_title)
+
 
     '''
     Run experiment
@@ -564,9 +876,9 @@ def main():
     parser.add_argument("-algorithms",
                         nargs="+",
                         help="Algorithms to run",
-                        choices=['value-iteration', ' q-learning', 'SARSA'],
+                        choices=['value-iteration', 'q-learning', 'SARSA'],
                         type=str,
-                        default=['value-iteration', ' q-learning', 'SARSA'])
+                        default=['value-iteration', 'q-learning', 'SARSA'])
     parser.add_argument("-crash-scenarios",
                         nargs="+",
                         help="Crash scenario",
