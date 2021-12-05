@@ -1,4 +1,6 @@
+
 import os, psutil
+import signal
 import argparse
 import copy
 import multiprocessing
@@ -8,6 +10,8 @@ import traceback
 import numpy as np
 import sys
 import random
+random.seed(10)
+
 np.set_printoptions(threshold=sys.maxsize, linewidth=2000)
 
 MAX_VELOCITY_MAGNITUDE = 5
@@ -999,23 +1003,72 @@ def main():
     lock = multiprocessing.Lock()
     experiment_timing = {}  # Time for each individual experiment
 
-    for input_num, track_name in enumerate(input_tracks_dict.keys()):
-        for algo_num, algorithm_name in enumerate(algorithms):
-            for scenario_num, crash_scenario_name in enumerate(crash_scenarios):
-                for epsn in epsilon:
-                    for df in discount_factor:
-                        for lrn_rate in learning_rate:
-                            proc = multiprocessing.Process(target=racetrack_experiment,
-                                                           args=(track_name,
-                                                                 input_tracks_dict[track_name],
-                                                                 algorithm_name,
-                                                                 crash_scenario_name,
-                                                                 df,
-                                                                 lrn_rate,
-                                                                 epsn,
-                                                                 results_dict,
-                                                                 lock))
-                            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+    track_name = 'L-track.txt'
+    for algo_num, algorithm_name in enumerate(algorithms):
+
+        crash_scenario_name = crash_scenarios[0]
+        epsn = epsilon[0]
+        df = discount_factor[0]
+        lrn_rate = learning_rate[0]
+
+        for crash_scenario_name in crash_scenarios:
+            proc = multiprocessing.Process(target=racetrack_experiment,
+                                           args=(track_name,
+                                                 input_tracks_dict[track_name],
+                                                 algorithm_name,
+                                                 crash_scenario_name,
+                                                 df,
+                                                 lrn_rate,
+                                                 epsn,
+                                                 results_dict,
+                                                 lock))
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+
+
+        for epsn in epsilon:
+
+
+
+            proc = multiprocessing.Process(target=racetrack_experiment,
+                                           args=(track_name,
+                                                 input_tracks_dict[track_name],
+                                                 algorithm_name,
+                                                 crash_scenario_name,
+                                                 df,
+                                                 lrn_rate,
+                                                 epsn,
+                                                 results_dict,
+                                                 lock))
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+
+
+        for df in discount_factor:
+            proc = multiprocessing.Process(target=racetrack_experiment,
+                                           args=(track_name,
+                                                 input_tracks_dict[track_name],
+                                                 algorithm_name,
+                                                 crash_scenario_name,
+                                                 df,
+                                                 lrn_rate,
+                                                 epsn,
+                                                 results_dict,
+                                                 lock))
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+
+
+        for lrn_rate in learning_rate:
+            proc = multiprocessing.Process(target=racetrack_experiment,
+                                           args=(track_name,
+                                                 input_tracks_dict[track_name],
+                                                 algorithm_name,
+                                                 crash_scenario_name,
+                                                 df,
+                                                 lrn_rate,
+                                                 epsn,
+                                                 results_dict,
+                                                 lock))
+
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
 
     max_jobs = 1
     i = 0
@@ -1027,7 +1080,12 @@ def main():
 
         for experiment_key in list(experiment_jobs.keys())[i:i+max_jobs]:
             job = experiment_jobs[experiment_key]
-            job.join()
+
+            time.sleep(2)
+            if (job.is_alive()):
+                os.kill(job.pid, signal.CTRL_C_EVENT)
+                job.start()
+
             experiment_timing[experiment_key] = time.time() - experiment_timing[experiment_key]
             print(f"Finished experiment: {experiment_key} in {experiment_timing[experiment_key]} seconds")
 
@@ -1036,7 +1094,6 @@ def main():
     t1 = time.time()
     print(f"Average time per experiment: {np.average(list(experiment_timing.values()))}")
     print(f"Time to perform {len(experiment_timing.keys())} experiments concurrently: {t1 - t0}")
-
 
 if __name__ == "__main__":
     main()
