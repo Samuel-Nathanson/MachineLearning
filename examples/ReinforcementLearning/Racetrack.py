@@ -1,3 +1,4 @@
+import os, psutil
 import argparse
 import copy
 import multiprocessing
@@ -18,7 +19,7 @@ def racetrack_experiment(track_name: str,
                          crash_scenario_name: str,
                          discount_factor: float,
                          learning_rate: float,
-                         convergence_threshold: float,
+                         initial_epsilon: float,
                          results_dict: dict,
                          lock):
     '''
@@ -28,11 +29,12 @@ def racetrack_experiment(track_name: str,
     :param crash_scenario_name:
     :param discount_factor:
     :param learning_rate:
-    :param convergence_threshold:
+    :param epsilon:
     :param results_dict:
     :param lock:
     :return:
     '''
+    convergence_threshold = 0.1
 
     '''
     ================================================================
@@ -40,10 +42,9 @@ def racetrack_experiment(track_name: str,
     ================================================================
     '''
     def visualize_board(optimal_path, title=""):
-        import matplotlib.pyplot as plt
         ax = plt.figure()
 
-        num_crashses = 0
+        num_crashes = 0
 
         for y, x in np.ndindex(track_matrix.shape):
             if (track_matrix[y, x] == '#'):
@@ -75,7 +76,7 @@ def racetrack_experiment(track_name: str,
             acceleration_color = "purple"
             crash_color = "red"
             if(will_crash or will_go_out_of_bounds):
-                num_crashses +=1
+                num_crashes +=1
                 velocity_color = crash_color
                 acceleration_color = crash_color
 
@@ -126,13 +127,13 @@ def racetrack_experiment(track_name: str,
                                      markerfacecolor='yellow', markersize=15),
                           plt.Line2D([0], [0], marker='o', color='blue', label=f'# Actions Required: {len(optimal_path)}',
                                     markerfacecolor='blue', markersize=15),
-                          plt.Line2D([0], [0], marker='o', color='red', label=f'# Crashses: {num_crashses}',
+                          plt.Line2D([0], [0], marker='o', color='red', label=f'# Crashses: {num_crashes}',
                                      markerfacecolor='red', markersize=15)]
+
 
         # Create the figure
         ax.legend(handles=legend_elements, loc='upper right')
         ax.legend(handles=stats_elements, loc='upper left')
-
 
         plt.savefig(f"results/{algorithm_name}_{track_name}_{t}.png", dpi=100)
         plt.clf()
@@ -174,6 +175,32 @@ def racetrack_experiment(track_name: str,
             if (track_matrix[new_position] == 'F'):
                 break
 
+
+        # Write out parameters for data collection
+        t = int(title.split(' ')[2])
+        num_crashes = 0
+        for i, state_t in enumerate(state_path):
+            will_crash = state_t["will_crash"]
+            will_go_out_of_bounds = state_t["will_go_out_of_bounds"]
+            if(will_crash or will_go_out_of_bounds):
+                num_crashes +=1
+        lock.acquire()
+        with open ("results/runs.data", "a") as f:
+            params = [algorithm_name,
+                          track_name,
+                          discount_factor,
+                          learning_rate,
+                          initial_epsilon,
+                          crash_scenario_name,
+                          t,
+                          num_crashes,
+                          len(state_path),
+                      "\n"]
+            f.write(",".join(params))
+
+        lock.release()
+
+        visualize = False
         if(visualize):
             visualize_board(optimal_path=state_path,  title=title)
 
@@ -222,6 +249,32 @@ def racetrack_experiment(track_name: str,
             if (track_matrix[new_position] == 'F'):
                 break
 
+        # Write out parameters for data collection
+        t = int(title.split(' ')[2])
+        num_crashes = 0
+        for i, state_t in enumerate(state_path):
+            will_crash = state_t["will_crash"]
+            will_go_out_of_bounds = state_t["will_go_out_of_bounds"]
+            if(will_crash or will_go_out_of_bounds):
+                num_crashes +=1
+        lock.acquire()
+        with open ("runs.data", "a") as f:
+            params = [algorithm_name,
+                          track_name,
+                          discount_factor,
+                          learning_rate,
+                          initial_epsilon,
+                          crash_scenario_name,
+                          t,
+                          num_crashes,
+                          len(state_path),
+                          "\n"]
+            for i,p in enumerate(params):
+                params[i] = str(p)
+            f.write(",".join(params))
+        lock.release()
+
+        visualize = False
         if(visualize):
             visualize_board(optimal_path=state_path, title=title)
 
@@ -657,6 +710,7 @@ def racetrack_experiment(track_name: str,
 
             # Detect convergence
             differences = abs(np.subtract(list(v[t].values()), list(v[t-1].values())))
+            del v[t - 1]
             safe_print(f"t={t}, Vdiff_max={max(differences)}, threshold={convergence_threshold} : {track_name}/{algorithm_name}/{crash_scenario_name}")
             if(all(i < convergence_threshold for i in differences)):
                 break
@@ -670,7 +724,6 @@ def racetrack_experiment(track_name: str,
 
         # Iteration (episode) number will be used to control both temperature and epsilon.
         temperature = iteration + 1
-        initial_epsilon = 0.1
 
         # Gradually decrease epsilon with more episodes
         epsilon = np.power(initial_epsilon, 1 + iteration / 10)
@@ -733,7 +786,10 @@ def racetrack_experiment(track_name: str,
                 if is_in_finish(new_position):
                     break
 
-            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}")
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / 1000000  # in MB
+            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}, mem={mem}MB")
+
             # Visualize resulting agent behavior at the end of each episode
             visualization_title = f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}"
             race_with_q_table(q, visualize=True, title=visualization_title)
@@ -782,8 +838,11 @@ def racetrack_experiment(track_name: str,
                 if is_in_finish(new_position):
                     break
 
-            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}")
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / 1000000  # in MB
+            safe_print(f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}, mem={mem}MB")
             # Visualize resulting agent behavior at the end of each episode
+
             visualization_title = f"Policy after {episode_num} episodes for experiment: {algorithm_name} on {track_name} with crash scenario {crash_scenario_name}"
             race_with_q_table(q, visualize=True, title=visualization_title)
 
@@ -890,22 +949,22 @@ def main():
     parser.add_argument("-discount-factor",
                         help="Discount factor. Larger discount factors mean that rewards further in the future count more",
                         type=float,
-                        default=0.01)
+                        default=[0.01, 0.1, 0.5, 0.75, 0.99])
     parser.add_argument("-learning_rate",
                         help="Learning rate. Higher learning rates cause learning to occur faster, but may cause oscillation around convergence",
                         type=float,
-                        default=0.1)
-    parser.add_argument("-convergence_threshold",
-                        help="Convergence Threshold",
+                        default=[0.001, 0.01, 0.1, 0.5, 0.75])
+    parser.add_argument("-epsilon",
+                        help="Initial Value for Epsilon",
                         type=float,
-                        default=0.1)
+                        default=[0.2, 0.4, 0.5, 0.8, 1.0])
     args = parser.parse_args()
     inputs = validate_input(args.inputs)
-    algorithms = args.algorithms
-    crash_scenarios = args.crash_scenarios
-    discount_factor = validate_discount_factor(args.discount_factor)
-    convergence_threshold = validate_convergence_threshold(args.convergence_threshold)
-    learning_rate = validate_learning_rate(args.learning_rate)
+    algorithms = args.algorithms if isinstance(args.algorithms, list) else [args.algorithms]
+    crash_scenarios = args.crash_scenarios if isinstance(args.crash_scenarios, list) else [args.crash_scenarios]
+    discount_factor = args.discount_factor if isinstance(args.discount_factor, list) else [args.discount_factor]
+    epsilon = args.epsilon if isinstance(args.epsilon, list) else [args.epsilon]
+    learning_rate = args.learning_rate if isinstance(args.learning_rate, list) else [args.learning_rate]
 
     '''
     Read Input File(s)
@@ -943,27 +1002,36 @@ def main():
     for input_num, track_name in enumerate(input_tracks_dict.keys()):
         for algo_num, algorithm_name in enumerate(algorithms):
             for scenario_num, crash_scenario_name in enumerate(crash_scenarios):
-                proc = multiprocessing.Process(target=racetrack_experiment,
-                                               args=(track_name,
-                                                     input_tracks_dict[track_name],
-                                                     algorithm_name,
-                                                     crash_scenario_name,
-                                                     discount_factor,
-                                                     learning_rate,
-                                                     convergence_threshold,
-                                                     results_dict,
-                                                     lock))
-                experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy"] = proc
+                for epsn in epsilon:
+                    for df in discount_factor:
+                        for lrn_rate in learning_rate:
+                            proc = multiprocessing.Process(target=racetrack_experiment,
+                                                           args=(track_name,
+                                                                 input_tracks_dict[track_name],
+                                                                 algorithm_name,
+                                                                 crash_scenario_name,
+                                                                 df,
+                                                                 lrn_rate,
+                                                                 epsn,
+                                                                 results_dict,
+                                                                 lock))
+                            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
 
-    for proc_num, experiment_key in enumerate(experiment_jobs.keys()):
-        print(f"Performing experiment {experiment_key} with process {proc_num}")
-        experiment_jobs[experiment_key].start()
-        experiment_timing[experiment_key] = time.time()
+    max_jobs = 1
+    i = 0
+    while i < len(experiment_jobs.keys()):
+        for proc_num, experiment_key in enumerate(list(experiment_jobs.keys())[i:i+max_jobs]):
+            print(f"Performing experiment {experiment_key} with process {proc_num}")
+            experiment_jobs[experiment_key].start()
+            experiment_timing[experiment_key] = time.time()
 
-    for experiment_key, job in experiment_jobs.items():
-        job.join()
-        experiment_timing[experiment_key] = time.time() - experiment_timing[experiment_key]
-        print(f"Finished experiment: {experiment_key} in {experiment_timing[experiment_key]} seconds")
+        for experiment_key in list(experiment_jobs.keys())[i:i+max_jobs]:
+            job = experiment_jobs[experiment_key]
+            job.join()
+            experiment_timing[experiment_key] = time.time() - experiment_timing[experiment_key]
+            print(f"Finished experiment: {experiment_key} in {experiment_timing[experiment_key]} seconds")
+
+        i+=max_jobs
 
     t1 = time.time()
     print(f"Average time per experiment: {np.average(list(experiment_timing.values()))}")
