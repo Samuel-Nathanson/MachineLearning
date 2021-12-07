@@ -46,6 +46,7 @@ def racetrack_experiment(track_name: str,
     ================================================================
     '''
     def visualize_board(optimal_path, title=""):
+        import matplotlib.pyplot as plt
         ax = plt.figure()
 
         num_crashes = 0
@@ -111,7 +112,6 @@ def racetrack_experiment(track_name: str,
                       head_starts_at_zero=True)
 
         ## Add legend, title, and axes label, save
-
         plt.ylabel("y-coordinate")
         plt.xlabel("x-coordinate")
         plt.title(title)
@@ -201,7 +201,6 @@ def racetrack_experiment(track_name: str,
                           len(state_path),
                       "\n"]
             f.write(",".join(params))
-
         lock.release()
 
         visualize = False
@@ -210,7 +209,6 @@ def racetrack_experiment(track_name: str,
 
 
     def race_with_q_table(q, visualize=False, title=""):
-
         # Epsilon Greedy gradually decreases epsilon and uses a temperature variables to switch from exploration
         # To exploitation
         # We want to promote exploitation once we have a well-trained q-table, thus we should artificially simulate
@@ -384,8 +382,6 @@ def racetrack_experiment(track_name: str,
             else:
                 new_position = get_starting_coordinates()
 
-
-
         new_state = new_position + new_velocity
 
         return new_state, new_position, new_velocity, crashed, out_of_bounds
@@ -395,24 +391,24 @@ def racetrack_experiment(track_name: str,
         previous_finish_distances = 0
         new_finish_distances = 0
         finish_coordinates = get_finish_coordinates()
+        total_reward = -1
 
-        total_reward = -5
-
+        # if(is_in_finish(new_position)):
+        #     total_reward = 0
+        #
         # Reward for moving closer to the finish line
         for finish_point in finish_coordinates:
             previous_finish_distances += manhattan_distance(previous_position, finish_point)
             new_finish_distances += manhattan_distance(new_position, finish_point)
         total_reward += (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
 
-        # Penalty for crashing
         if( crashed or out_of_bounds ):
-            total_reward = -1000
+            total_reward = -50
 
         if is_in_finish(new_position):
             total_reward += 500
-
+        # return 0 if is_in_finish(new_position) else -1
         return total_reward
-
 
     def get_probability_of_action_success():
         return 0.8
@@ -961,7 +957,7 @@ def main():
     parser.add_argument("-epsilon",
                         help="Initial Value for Epsilon",
                         type=float,
-                        default=[0.2, 0.4, 0.5, 0.8, 1.0])
+                        default=[0.2, 0.4, 0.6, 0.8, 1.0])
     args = parser.parse_args()
     inputs = validate_input(args.inputs)
     algorithms = args.algorithms if isinstance(args.algorithms, list) else [args.algorithms]
@@ -1004,43 +1000,13 @@ def main():
     experiment_timing = {}  # Time for each individual experiment
 
     track_name = 'L-track.txt'
+    crash_scenario_name = "near-wall"
+
+    algorithms = ['SARSA']
     for algo_num, algorithm_name in enumerate(algorithms):
-
-        crash_scenario_name = crash_scenarios[0]
-        epsn = epsilon[0]
-        df = discount_factor[0]
-        lrn_rate = learning_rate[0]
-
-        for crash_scenario_name in crash_scenarios:
-            proc = multiprocessing.Process(target=racetrack_experiment,
-                                           args=(track_name,
-                                                 input_tracks_dict[track_name],
-                                                 algorithm_name,
-                                                 crash_scenario_name,
-                                                 df,
-                                                 lrn_rate,
-                                                 epsn,
-                                                 results_dict,
-                                                 lock))
-            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
-
-
-        for epsn in epsilon:
-
-
-
-            proc = multiprocessing.Process(target=racetrack_experiment,
-                                           args=(track_name,
-                                                 input_tracks_dict[track_name],
-                                                 algorithm_name,
-                                                 crash_scenario_name,
-                                                 df,
-                                                 lrn_rate,
-                                                 epsn,
-                                                 results_dict,
-                                                 lock))
-            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
-
+        epsn = epsilon[3]
+        df = discount_factor[3]
+        lrn_rate = learning_rate[2]
 
         for df in discount_factor:
             proc = multiprocessing.Process(target=racetrack_experiment,
@@ -1054,6 +1020,21 @@ def main():
                                                  results_dict,
                                                  lock))
             experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+        df = discount_factor[3]
+
+        for epsn in epsilon:
+            proc = multiprocessing.Process(target=racetrack_experiment,
+                                           args=(track_name,
+                                                 input_tracks_dict[track_name],
+                                                 algorithm_name,
+                                                 crash_scenario_name,
+                                                 df,
+                                                 lrn_rate,
+                                                 epsn,
+                                                 results_dict,
+                                                 lock))
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+        epsn = epsilon[3]
 
 
         for lrn_rate in learning_rate:
@@ -1070,7 +1051,7 @@ def main():
 
             experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
 
-    max_jobs = 1
+    max_jobs = 1000
     i = 0
     while i < len(experiment_jobs.keys()):
         for proc_num, experiment_key in enumerate(list(experiment_jobs.keys())[i:i+max_jobs]):
@@ -1080,15 +1061,9 @@ def main():
 
         for experiment_key in list(experiment_jobs.keys())[i:i+max_jobs]:
             job = experiment_jobs[experiment_key]
-
-            time.sleep(2)
-            if (job.is_alive()):
-                os.kill(job.pid, signal.CTRL_C_EVENT)
-                job.start()
-
+            job.join()
             experiment_timing[experiment_key] = time.time() - experiment_timing[experiment_key]
             print(f"Finished experiment: {experiment_key} in {experiment_timing[experiment_key]} seconds")
-
         i+=max_jobs
 
     t1 = time.time()
