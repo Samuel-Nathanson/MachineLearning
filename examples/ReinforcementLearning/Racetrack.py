@@ -401,24 +401,24 @@ def racetrack_experiment(track_name: str,
         :param crashed: boolean: true, if the vehicle crashed
         :param out_of_bounds: true if the vehicle went out of bounds.
         '''
-        previous_finish_distances = 0
-        new_finish_distances = 0
-        total_reward = -1
+        return 0 if is_in_finish(new_position) else -1
 
         # This reward function seems to work better than the 0/-1 reward function.
-        finish_coordinates = get_finish_coordinates()
-        for finish_point in finish_coordinates:
-            previous_finish_distances += manhattan_distance(previous_position, finish_point)
-            new_finish_distances += manhattan_distance(new_position, finish_point)
-        total_reward += (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
-        if( crashed or out_of_bounds ):
-            total_reward = -50
+        # previous_finish_distances = 0
+        # new_finish_distances = 0
+        # total_reward = -1
+        # finish_coordinates = get_finish_coordinates()
+        # for finish_point in finish_coordinates:
+        #     previous_finish_distances += manhattan_distance(previous_position, finish_point)
+        #     new_finish_distances += manhattan_distance(new_position, finish_point)
+        # total_reward += (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
+        # if( crashed or out_of_bounds ):
+        #     total_reward = -50
+        #
+        # if is_in_finish(new_position):
+        #     total_reward += 500
+        # return total_reward
 
-        if is_in_finish(new_position):
-            total_reward += 500
-        return total_reward
-
-        return 0 if is_in_finish(new_position) else -1
 
     def get_probability_of_action_success():
         '''
@@ -735,13 +735,13 @@ def racetrack_experiment(track_name: str,
                 q[t][s] = {}
                 for a in actions:
 
-                    new_state_s = update_state(s, a, failed_action=True)[0]
+                    new_state_s = update_state(s, a, failed_action=False)[0]
                     new_state_f = update_state(s, a, failed_action=False)[0]
-                    value_f = discount_factor * v[t-1][new_state_s]
-                    value_s = discount_factor * v[t-1][new_state_f]
+                    value_f = v[t-1][new_state_f]
+                    value_s = v[t-1][new_state_s]
 
-                    expected_value_f = value_s * get_probability_of_action_success()
-                    expected_value_s = value_f * (1-get_probability_of_action_success())
+                    expected_value_s = value_s * get_probability_of_action_success()
+                    expected_value_f = value_f * (1-get_probability_of_action_success())
                     expected_value = expected_value_s + expected_value_f
 
                     expected_reward_f = reward(s, a, failed_action=True) * (1-get_probability_of_action_success())
