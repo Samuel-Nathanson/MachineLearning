@@ -45,11 +45,69 @@ line_colors = ['b', 'g', 'r', 'c', 'm']
 
 
 track = 'L-track.txt'
-algorithm = 'SARSA'
-epsilon = epsilon_values[3]
-learning_rate = learning_rate_values[2]
-discount = discount_values[3]
+algorithm = 'value-iteration'
+epsilon = epsilon_values[0]
+learning_rate = learning_rate_values[0]
+discount = discount_values[0]
 crash_scenario = crash_scenario_values[0]
+
+def viz_crashes():
+    crash_scenario = crash_scenario_values[0]
+
+    #  hold all variables constant except for epsilon and episode #
+    # filter for keys with learning_rate[0], discount[0], crash_scenario[0], track_name[0], algorithm[0]
+
+    iv = "Crash Scenario"
+    # check if we have all results
+    filtered_results = {
+        key:value for (key, value) in experimental_results.items()
+    }
+
+    legend_elements = []
+
+    # Create two subplots and unpack the output array immediately
+    f, (ax1, ax2) = plt.subplots(1, 2, sharey=False)
+    ax1.set_title('# Actions')
+    ax2.set_title('# Crashes')
+    ax1.set_ylabel('# Actions')
+    ax2.set_ylabel('# Crashes')
+    ax1.set_xlabel('# Episodes')
+    ax2.set_xlabel('# Episodes')
+
+    plt.suptitle(f'Experiment with variable epsilon: track={track}, algorithm={algorithm}, discount={discount}, crash_scenario={crash_scenario}, learning_rate={learning_rate}')
+
+    # Create four polar axes and access them through the returned array
+
+    for i, crash_scenario in enumerate(crash_scenario_values):
+        filtered_results_epsilon = {
+            key:value for (key, value) in filtered_results.items() if key[CRASH_SCENARIO_KEY_IDX] == crash_scenario
+        }
+        x_episodes = sorted(np.unique([int(x[EPISODE_KEY_IDX]) for x in filtered_results_epsilon.keys()]))
+
+        if(len(x_episodes) == 0):
+            continue
+
+        make_key = lambda episode: (algorithm, track, discount, learning_rate, epsilon, crash_scenario, episode)
+
+        y_crashes = [int(filtered_results_epsilon[make_key(str(e))][CRASH_IDX]) for e in x_episodes]
+        y_actions = [int(filtered_results_epsilon[make_key(str(e))][ACTIONS_IDX]) for e in x_episodes]
+
+        m_actions, b_actions = np.polyfit(x_episodes, y_actions, 1)
+        m_crashes, b_crashes = np.polyfit(x_episodes, y_crashes, 1)
+        plt.legend()
+        ax1.plot(x_episodes, y_crashes, line_colors[i], alpha=0.2)
+        ax2.plot(x_episodes, y_actions, line_colors[i], alpha=0.2)
+        ax1.plot(x_episodes, m_crashes*np.array(x_episodes) + b_crashes, f"{line_colors[i]}--")
+        ax2.plot(x_episodes, m_actions*np.array(x_episodes) + b_actions, f"{line_colors[i]}--")
+
+        legend_elements.append(plt.Line2D([0], [0], color=line_colors[i], lw=4, label=f"{iv}={crash_scenario}"))
+        legend_elements.append(plt.Line2D([0], [0], color=line_colors[i], linestyle='--', lw=1, label=f"Linear Regression for {iv}={crash_scenario}"))
+
+
+    ax1.legend(handles=legend_elements, loc='upper right')
+    ax2.legend(handles=legend_elements, loc='upper right')
+
+    plt.show()
 
 def viz_epsilon():
     #  hold all variables constant except for epsilon and episode #
@@ -238,6 +296,9 @@ def viz_learning_rate():
 
 def viz_crash_scenario():
     pass
+
+
+viz_crashes()
 
 viz_epsilon()
 viz_learning_rate()

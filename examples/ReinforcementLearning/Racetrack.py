@@ -1,8 +1,6 @@
 
-import os, psutil
-import signal
+import psutil
 import argparse
-import copy
 import multiprocessing
 import time
 import os
@@ -10,7 +8,7 @@ import traceback
 import numpy as np
 import sys
 import random
-random.seed(10)
+random.seed(11)
 
 np.set_printoptions(threshold=sys.maxsize, linewidth=2000)
 
@@ -24,21 +22,29 @@ def racetrack_experiment(track_name: str,
                          discount_factor: float,
                          learning_rate: float,
                          initial_epsilon: float,
-                         results_dict: dict,
                          lock):
     '''
-    :param track_name:
-    :param track_matrix:
-    :param algorithm_name:
-    :param crash_scenario_name:
-    :param discount_factor:
-    :param learning_rate:
-    :param epsilon:
-    :param results_dict:
-    :param lock:
+    :param track_name: Track name for visualization titles.
+    :param track_matrix: Full track matrix
+    :param algorithm_name: Algorithm to run
+    :param crash_scenario_name: "restart" or "near-wall", determines whether the crash scenario
+    :param discount_factor: Discount factor 0 < d < 1
+    :param learning_rate: Initial learning rate value
+    :param epsilon: Initial epsilon value
+    :param lock: Mutex lock to prevent overwriting of resources
     :return:
     '''
     convergence_threshold = 0.1
+
+    def adapt_learning_rate(alpha, prev_value, new_value):
+        a = .01
+        b = .01
+        if (new_value - prev_value) > 0:
+            # increase learning rate
+            alpha += a
+        else:
+            alpha -= alpha * b
+        return alpha
 
     '''
     ================================================================
@@ -46,6 +52,9 @@ def racetrack_experiment(track_name: str,
     ================================================================
     '''
     def visualize_board(optimal_path, title=""):
+        '''
+        Race simulation visualization
+        '''
         import matplotlib.pyplot as plt
         ax = plt.figure()
 
@@ -145,6 +154,9 @@ def racetrack_experiment(track_name: str,
 
 
     def race_with_policy(policy, visualize=False, title=""):
+        '''
+        Race simulation, given a trained policy table.
+        '''
         start_state = get_starting_state()
         state_path = []
 
@@ -203,12 +215,15 @@ def racetrack_experiment(track_name: str,
             f.write(",".join(params))
         lock.release()
 
-        visualize = False
+        visualize = True
         if(visualize):
             visualize_board(optimal_path=state_path,  title=title)
 
 
     def race_with_q_table(q, visualize=False, title=""):
+        '''
+        Race simulation, given a trained q-table.
+        '''
         # Epsilon Greedy gradually decreases epsilon and uses a temperature variables to switch from exploration
         # To exploitation
         # We want to promote exploitation once we have a well-trained q-table, thus we should artificially simulate
@@ -280,20 +295,6 @@ def racetrack_experiment(track_name: str,
         if(visualize):
             visualize_board(optimal_path=state_path, title=title)
 
-
-    '''
-    ================================================================
-    Random Action Functions
-    ================================================================
-
-    '''
-    def get_random_acceleration():
-        return random.choice(get_possible_accelerations())
-
-
-    def get_random_direction():
-        return random.choice(get_possible_directions())
-
     '''
     ================================================================
     Getting / Updating State and Action Parameters
@@ -301,25 +302,22 @@ def racetrack_experiment(track_name: str,
     '''
 
     def get_velocity(state):
+        '''
+        Helper function to return velocity from state tuple.
+        '''
         return (state[2], state[3])
 
     def get_position(state):
+        '''
+        Helper function to return position from state tuple.
+        '''
         return (state[0], state[1])
 
     def get_acceleration(action):
+        '''
+        Helper function to return acceleration from action tuple.
+        '''
         return action[2]
-
-    def update_velocity(state, velocity):
-        state[2] = velocity[1]
-        state[3] = velocity[2]
-
-    def update_position(state, position):
-        state[0] = position[0]
-        state[1] = position[1]
-
-    def update_acceleration(action, acceleration):
-        action[2] = acceleration
-
 
     '''
     ================================================================
@@ -328,6 +326,14 @@ def racetrack_experiment(track_name: str,
     '''
 
     def update_state(state, action, failed_action=None):
+        '''
+        Update state function, given a state and action
+        :param state:
+        :param action:
+        :param failed_action: boolean to manually decide whether or not the action failed. If set to none, this will be
+                                chosen manually.
+        :return:
+        '''
         position = (state[0], state[1])
         velocity = (state[2], state[3])
         acceleration = action
@@ -388,29 +394,36 @@ def racetrack_experiment(track_name: str,
 
 
     def get_reward(previous_position, new_position, crashed, out_of_bounds):
+        '''
+        Reward function
+        :param previous_position: (y,x) previous position
+        :param new_position: (y,x) new position
+        :param crashed: boolean: true, if the vehicle crashed
+        :param out_of_bounds: true if the vehicle went out of bounds.
+        '''
         previous_finish_distances = 0
         new_finish_distances = 0
-        finish_coordinates = get_finish_coordinates()
         total_reward = -1
 
-        # if(is_in_finish(new_position)):
-        #     total_reward = 0
-        #
-        # Reward for moving closer to the finish line
+        # This reward function seems to work better than the 0/-1 reward function.
+        finish_coordinates = get_finish_coordinates()
         for finish_point in finish_coordinates:
             previous_finish_distances += manhattan_distance(previous_position, finish_point)
             new_finish_distances += manhattan_distance(new_position, finish_point)
         total_reward += (previous_finish_distances - new_finish_distances) / len(finish_coordinates)
-
         if( crashed or out_of_bounds ):
             total_reward = -50
 
         if is_in_finish(new_position):
             total_reward += 500
-        # return 0 if is_in_finish(new_position) else -1
         return total_reward
 
+        return 0 if is_in_finish(new_position) else -1
+
     def get_probability_of_action_success():
+        '''
+        Returns the probability of a successful action (coded to 0.8)
+        '''
         return 0.8
 
     '''
@@ -420,12 +433,20 @@ def racetrack_experiment(track_name: str,
     '''
 
     def get_possible_accelerations():
+        '''
+        Returns a list of all possible accelerations.
+        :return:
+        '''
         directions = get_possible_directions()
         zero_acceleration = (0,0)
         return directions + [zero_acceleration]
 
 
     def get_possible_directions():
+        '''
+        Returns a list of all possible directions (N,E,S,W)
+        :return:
+        '''
         north = (1,0)
         east = (0, 1)
         south = (-1, 0)
@@ -434,6 +455,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_possible_velocities():
+        '''
+        Returns a list of all possible velocities, used to build state table.
+        '''
         velocities = []
         for v_x in range(MIN_VELOCITY_MAGNITUDE,MAX_VELOCITY_MAGNITUDE +1):
             for v_y in range(MIN_VELOCITY_MAGNITUDE,MAX_VELOCITY_MAGNITUDE +1):
@@ -442,6 +466,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_possible_positions():
+        '''
+        Returns a list of all positions
+        '''
         positions = []
         for y, x in np.ndindex(track_matrix.shape):
             positions.append((y,x))
@@ -449,6 +476,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_possible_valid_positions():
+        '''
+        Returns a list of possible valid positions.
+        '''
         valid_positions = []
         for (y,x) in get_possible_positions():
             if(track_matrix[y,x] == '.' or track_matrix[y,x] == 'F' or track_matrix[y,x] == 'S'):
@@ -457,9 +487,16 @@ def racetrack_experiment(track_name: str,
 
 
     def get_possible_actions():
+        '''
+        :return: Returns a list of possible actions
+        '''
         return get_possible_accelerations()
 
     def get_possible_valid_states():
+        '''
+        Returns a list of all possible valid states (e.g. the vehicle cannot be inside a wall.)
+        :return:
+        '''
         valid_states = []
         for position in get_possible_valid_positions():
             for velocity in get_possible_velocities():
@@ -469,6 +506,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_possible_states():
+        '''
+        Returns a list of all possible states.
+        '''
         states = []
         for position in get_possible_positions():
             for velocity in get_possible_velocities():
@@ -478,6 +518,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_starting_coordinates():
+        '''
+        Returns the first coordinate from a list of starting coordinates.
+        '''
         starting_positions = []
         for y, x in np.ndindex(track_matrix.shape):
             if(track_matrix[y,x] == 'S'):
@@ -485,6 +528,10 @@ def racetrack_experiment(track_name: str,
         return starting_positions[0]
 
     def get_starting_state():
+        '''
+        Returns a starting state (y_start, x_start, 0,0)
+        :return:
+        '''
         start_coord = get_starting_coordinates()
         start_velocity = (0,0)
         start_state = start_coord + start_velocity
@@ -492,6 +539,9 @@ def racetrack_experiment(track_name: str,
 
 
     def get_finish_coordinates():
+        '''
+        Returns a list of coordinates with the 'F' tag.
+        '''
         finish_positions = []
         for y, x in np.ndindex(track_matrix.shape):
             if(track_matrix[y,x] == 'F'):
@@ -616,7 +666,7 @@ def racetrack_experiment(track_name: str,
     def is_in_finish(position):
         '''
         Detects whether the given position is at the finish line
-        # TODO: *Crosses* finish line
+        :param position: y,x tuple of position coordinate.
         '''
         y = position[0]
         x = position[1]
@@ -626,6 +676,7 @@ def racetrack_experiment(track_name: str,
 
     def is_outside_bounds(position):
         '''
+        :param position: y,x tuple of position coordinate.
         Detects whether the position is outside of the bounds of the track
         '''
         y = position[0]
@@ -643,6 +694,7 @@ def racetrack_experiment(track_name: str,
     def reward(state, action, failed_action: bool=None):
         '''
         Reward function, given a state and action.
+        :param state: State tuple (y, x, velocity)
         :param failed_action: Manually detect whether or not a failed action occurred. Default is none, which means this
         will be randomly selected
         '''
@@ -726,7 +778,8 @@ def racetrack_experiment(track_name: str,
         temperature = iteration + 1
 
         # Gradually decrease epsilon with more episodes
-        epsilon = np.power(initial_epsilon, 1 + iteration / 10)
+
+        epsilon = np.power(initial_epsilon, 1 + iteration / 5000)
 
         # With probability epsilon, choose a random action with uniform probability. Otherwise exploit Q-Values.
         if(random.random() < epsilon):
@@ -744,17 +797,23 @@ def racetrack_experiment(track_name: str,
 
 
     def q_learning_experiment():
+        '''
+        Runs an experiment for the q-learning Algorithm
+        '''
 
         # Initialize q-table, possible states & actions.
         q = {}
+        learning_rates = {}
         valid_states = get_possible_valid_states()
         actions = get_possible_actions()
 
         # Initialize Q-Values to random values
         for state in valid_states:
             q[state] = {}
+            learning_rates[state] = {}
             for action in actions:
                 q[state][action] = random.random() * 0.001 # Arbitrary random values
+                learning_rates[state][action] = learning_rate
 
 
         # Set number of full episodes (Start->Finish) to run.
@@ -776,9 +835,14 @@ def racetrack_experiment(track_name: str,
                                   out_of_bounds=out_of_bounds)
 
                 # Update Q-Values
-                best_future_action = max(q[new_state], key=q[new_state].get)
-                q[state][action] += learning_rate * ( reward + discount_factor * q[state][best_future_action] - q[state][action])
+                previous_value = q[state][action]
 
+                best_future_action = max(q[new_state], key=q[new_state].get)
+                q[state][action] += learning_rates[state][action] * ( reward + discount_factor * q[state][best_future_action] - q[state][action])
+
+                new_value = q[state][action]
+
+                learning_rates[state][action] = adapt_learning_rate(learning_rates[state][action], previous_value, new_value)
                 # Update state
                 state = new_state
 
@@ -796,6 +860,9 @@ def racetrack_experiment(track_name: str,
 
 
     def sarsa_experiment():
+        '''
+        Runs an experiment for the SARSA Algorithm
+        '''
 
         # Initialize q-table, possible states & actions.
         q = {}
@@ -1002,54 +1069,63 @@ def main():
     track_name = 'L-track.txt'
     crash_scenario_name = "near-wall"
 
-    algorithms = ['SARSA']
+    algorithms = ['value-iteration']
     for algo_num, algorithm_name in enumerate(algorithms):
         epsn = epsilon[3]
         df = discount_factor[3]
         lrn_rate = learning_rate[2]
 
-        for df in discount_factor:
+        for crash_scenario in ["restart"]:
             proc = multiprocessing.Process(target=racetrack_experiment,
                                            args=(track_name,
                                                  input_tracks_dict[track_name],
                                                  algorithm_name,
-                                                 crash_scenario_name,
+                                                 crash_scenario,
                                                  df,
                                                  lrn_rate,
-                                                 epsn,
-                                                 results_dict,
+                                                 0.5,
                                                  lock))
-            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
-        df = discount_factor[3]
+            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
 
-        for epsn in epsilon:
-            proc = multiprocessing.Process(target=racetrack_experiment,
-                                           args=(track_name,
-                                                 input_tracks_dict[track_name],
-                                                 algorithm_name,
-                                                 crash_scenario_name,
-                                                 df,
-                                                 lrn_rate,
-                                                 epsn,
-                                                 results_dict,
-                                                 lock))
-            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
-        epsn = epsilon[3]
-
-
-        for lrn_rate in learning_rate:
-            proc = multiprocessing.Process(target=racetrack_experiment,
-                                           args=(track_name,
-                                                 input_tracks_dict[track_name],
-                                                 algorithm_name,
-                                                 crash_scenario_name,
-                                                 df,
-                                                 lrn_rate,
-                                                 epsn,
-                                                 results_dict,
-                                                 lock))
-
-            experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+        # for df in discount_factor:
+        #     proc = multiprocessing.Process(target=racetrack_experiment,
+        #                                    args=(track_name,
+        #                                          input_tracks_dict[track_name],
+        #                                          algorithm_name,
+        #                                          crash_scenario_name,
+        #                                          df,
+        #                                          lrn_rate,
+        #                                          epsn,
+        #                                          lock))
+        #     experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+        # df = discount_factor[3]
+        #
+        # for epsn in epsilon:
+        #     proc = multiprocessing.Process(target=racetrack_experiment,
+        #                                    args=(track_name,
+        #                                          input_tracks_dict[track_name],
+        #                                          algorithm_name,
+        #                                          crash_scenario_name,
+        #                                          df,
+        #                                          lrn_rate,
+        #                                          epsn,
+        #                                          lock))
+        #     experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
+        # epsn = epsilon[3]
+        #
+        #
+        # for lrn_rate in learning_rate:
+        #     proc = multiprocessing.Process(target=racetrack_experiment,
+        #                                    args=(track_name,
+        #                                          input_tracks_dict[track_name],
+        #                                          algorithm_name,
+        #                                          crash_scenario_name,
+        #                                          df,
+        #                                          lrn_rate,
+        #                                          epsn,
+        #                                          lock))
+        #
+        #     experiment_jobs[f"{algorithm_name} on {track_name} with {crash_scenario_name} policy, e{epsn}, df{df}, l{lrn_rate}"] = proc
 
     max_jobs = 1000
     i = 0
