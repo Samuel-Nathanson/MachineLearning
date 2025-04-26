@@ -1,5 +1,5 @@
 # MachineLearning
-Samuel E. Nathanson's repository of <i>Private Machine Learning Libraries</i>
+Samuel E. Nathanson's repository of Machine Learning Libraries - Built for Introduction to Machine Learning (JHU Engineering for Professionals)
 
 ## Installation
 ```
